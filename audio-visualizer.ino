@@ -48,9 +48,7 @@
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
 
-// NOTE: Oscillator.h is preserved for future multi-waveform feature
-// Currently using ChordPlayer for chord mode implementation
-// #include "Oscillator.h"  // PRESERVED - will be restored when adding waveform selection
+#include "Oscillator.h"
 #include "ChordLibrary.h"
 #include "ChordPlayer.h"
 
@@ -99,13 +97,25 @@ TaskHandle_t displayTaskHandle = NULL;
 SemaphoreHandle_t volumeMutex = NULL;
 
 // ========== Audio Generators ==========
-// Oscillator oscillator;  // PRESERVED - for future multi-waveform feature
+Oscillator oscillator;  // Single global oscillator - shared by all modes
 ChordPlayer chordPlayer;
 
 // ========== Shared Variables ==========
 float currentAmplitude = 1.0f;        // Current amplitude multiplier (0.0 to 1.0)
 int volumePercent = 100;              // Current volume percentage
-volatile PlayMode currentMode = MODE_SINGLE_NOTE;  // Current play mode
+volatile PlayMode currentMode = MODE_PROGRESSION;  // Current play mode (default: progression)
+OscillatorType currentGlobalWaveform = OSC_SAWTOOTH;  // Global waveform (default: sawtooth)
+
+// ========== Button State Tracking ==========
+volatile unsigned long buttonPressStartTime = 0;
+volatile bool buttonIsPressed = false;
+volatile bool buttonReleased = false;
+const unsigned long LONG_PRESS_THRESHOLD = 1000;  // 1 second
+const unsigned long DEBOUNCE_DELAY = 50;  // 50ms debounce
+
+// ========== Knob Animation ==========
+unsigned long knobAnimationEndTime = 0;
+bool showingKnobAnimation = false;
 
 // ========== Chord Progression Timing ==========
 unsigned long lastChordChangeTime = 0;
@@ -114,62 +124,87 @@ volatile int currentChordIndex = 0;
 const Chord* const* currentProgression = ChordLib::JAZZ_PROGRESSION_1;
 int currentProgressionLength = ChordLib::JAZZ_PROGRESSION_1_LENGTH;
 
-// ========== Single Note Generation (for NOTE mode) ==========
-const int SINE_TABLE_SIZE = 256;
-int16_t sineTableNote[SINE_TABLE_SIZE];
-const int16_t MAX_AMPLITUDE_SINGLE = 14000;
+// NOTE: Single note mode now uses global oscillator - no separate tables needed
 
-
-// ========== Read Volume from Potentiometer ==========
-void updateVolume() {
-  // Read ADC value (0-4095 on ESP32)
-  int adcValue = analogRead(DIAL1);
-  
-  // Apply smoothing to reduce jitter
-  static int smoothedADC = 2048;
-  smoothedADC = (smoothedADC * 7 + adcValue) / 8;  // Simple low-pass filter
-  
-  // Convert to amplitude multiplier (0.0 to 1.0)
-  currentAmplitude = smoothedADC / 4095.0f;
-  
-  // Convert to percentage for display
-  volumePercent = (int)(currentAmplitude * 100);
-  
-  // Optional: Set minimum volume to avoid complete silence
-  if (currentAmplitude < 0.05f) {
-    currentAmplitude = 0.0f;
-    volumePercent = 0;
+// ========== Waveform Cycling ==========
+void cycleWaveform() {
+  switch (currentGlobalWaveform) {
+    case OSC_SAWTOOTH: currentGlobalWaveform = OSC_SQUARE; break;
+    case OSC_SQUARE:   currentGlobalWaveform = OSC_TRIANGLE; break;
+    case OSC_TRIANGLE: currentGlobalWaveform = OSC_SINE; break;
+    case OSC_SINE:     currentGlobalWaveform = OSC_SAWTOOTH; break;
   }
+  
+  // Update global oscillator type
+  oscillator.setType(currentGlobalWaveform);
+  
+  // Show knob animation
+  showingKnobAnimation = true;
+  knobAnimationEndTime = millis() + 500;
+  
+  // Log change
+  Serial.print("Waveform: ");
+  Serial.println(oscillator.getTypeName());
 }
 
-// ========== Button Handler with Debouncing ==========
-void IRAM_ATTR onBootButtonPress() {
-  static unsigned long lastInterruptTime = 0;
-  unsigned long interruptTime = millis();
-  
-  // Debounce: ignore if button pressed within 250ms
-  if (interruptTime - lastInterruptTime > 250) {
-    // Cycle through 3 modes: NOTE -> CHORD -> PROGRESSION -> NOTE...
-    if (currentMode == MODE_SINGLE_NOTE) {
-      currentMode = MODE_CHORD;
-      chordPlayer.setWaveform(WAVE_SINE);  // Use sine for static chord
-      chordPlayer.reset();
-      chordPlayer.setChord(&ChordLib::CM7);  // Set to Cm7
-      Serial.println("Mode: CHORD (Cm7) [Sine]");
-    } else if (currentMode == MODE_CHORD) {
-      currentMode = MODE_PROGRESSION;
-      currentChordIndex = 0;  // Start with first chord
-      chordPlayer.setWaveform(WAVE_SAWTOOTH);  // Use sawtooth for progression
-      chordPlayer.setChordFromProgression(0, currentProgression, currentProgressionLength);
-      chordPlayer.reset();
-      lastChordChangeTime = millis();  // Initialize timing
-      Serial.println("Mode: PROGRESSION (Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7) [Sawtooth]");
-    } else {
-      currentMode = MODE_SINGLE_NOTE;
-      Serial.println("Mode: NOTE (880Hz)");
-    }
-    lastInterruptTime = interruptTime;
+// ========== Mode Cycling ==========
+void cycleMode() {
+  if (currentMode == MODE_PROGRESSION) {
+    currentMode = MODE_CHORD;
+    chordPlayer.reset();
+    chordPlayer.setChord(&ChordLib::CM7);
+    Serial.println("Mode: CHORD (Cm7)");
+  } else if (currentMode == MODE_CHORD) {
+    currentMode = MODE_SINGLE_NOTE;
+    Serial.println("Mode: SINGLE_NOTE (880Hz)");
+  } else {
+    currentMode = MODE_PROGRESSION;
+    currentChordIndex = 0;
+    chordPlayer.setChordFromProgression(0, currentProgression, currentProgressionLength);
+    chordPlayer.reset();
+    lastChordChangeTime = millis();
+    Serial.println("Mode: PROGRESSION (Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7)");
   }
+  
+  // Waveform is maintained in global oscillator automatically
+}
+
+// ========== Button Polling (called from loop) ==========
+void handleButtonPress() {
+  static unsigned long lastDebounceTime = 0;
+  static bool lastButtonState = HIGH;
+  bool buttonState = digitalRead(BOOT_BUTTON);
+  
+  // Debouncing
+  if (buttonState != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+  
+  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+    // Button state is stable
+    if (buttonState == LOW && !buttonIsPressed) {
+      // Button just pressed
+      buttonIsPressed = true;
+      buttonPressStartTime = millis();
+      buttonReleased = false;
+    } else if (buttonState == HIGH && buttonIsPressed) {
+      // Button just released
+      buttonIsPressed = false;
+      buttonReleased = true;
+      
+      unsigned long pressDuration = millis() - buttonPressStartTime;
+      
+      if (pressDuration < LONG_PRESS_THRESHOLD) {
+        // Short press - cycle waveform
+        cycleWaveform();
+      } else {
+        // Long press - cycle mode
+        cycleMode();
+      }
+    }
+  }
+  
+  lastButtonState = buttonState;
 }
 
 // ========== I2S Setup (New Driver API) ==========
@@ -282,31 +317,25 @@ void setup() {
   Serial.println("DIAL1 (volume) initialized on GPIO 4");
   Serial.println("DIAL2 initialized on GPIO 33");
 
-  // Initialize BOOT button with interrupt
+  // Initialize BOOT button for polling
   pinMode(BOOT_BUTTON, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BOOT_BUTTON), onBootButtonPress, FALLING);
-  Serial.println("BOOT button initialized on GPIO 0");
+  Serial.println("BOOT button initialized on GPIO 0 (short=waveform, long=mode)");
 
   // Initialize display first
   setupDisplay();
   
-  // Build sine table for single note mode
-  for (int i = 0; i < SINE_TABLE_SIZE; i++) {
-    float phase = (2.0f * PI * i) / SINE_TABLE_SIZE;
-    sineTableNote[i] = (int16_t)(sinf(phase) * MAX_AMPLITUDE_SINGLE);
-  }
-  Serial.println("Single note sine table built");
+  // Build waveform tables once in global oscillator
+  oscillator.buildTables();
+  oscillator.setType(OSC_SAWTOOTH);  // Default waveform
+  Serial.println("Oscillator waveform tables built");
   
-  // Initialize chord player
-  chordPlayer.buildTable();
+  // Initialize chord player with shared oscillator
+  chordPlayer.setOscillator(&oscillator);
   chordPlayer.init(SAMPLE_RATE);
-  Serial.println("Chord player initialized");
+  Serial.println("Chord player initialized (using shared oscillator)");
   
   // Initialize I2S audio
   setupI2S();
-  
-  // Read initial volume
-  updateVolume();
 
   // Create mutex for volume synchronization
   volumeMutex = xSemaphoreCreateMutex();
@@ -338,19 +367,26 @@ void setup() {
     0                    // Core 0
   );
 
+  // Set default mode to PROGRESSION with SAWTOOTH waveform
+  currentMode = MODE_PROGRESSION;
+  currentGlobalWaveform = OSC_SAWTOOTH;
+  oscillator.setType(OSC_SAWTOOTH);  // Oscillator handles waveform
+  currentChordIndex = 0;
+  chordPlayer.setChordFromProgression(0, currentProgression, currentProgressionLength);
+  chordPlayer.reset();
+  lastChordChangeTime = millis();
+  
   Serial.println("Setup complete!");
-  Serial.println("Mode: NOTE (single tone)");
-  Serial.print("Frequency: ");
-  Serial.print(TONE_FREQUENCY, 0);
-  Serial.println(" Hz");
+  Serial.println("Default: PROGRESSION mode with SAWTOOTH waveform");
+  Serial.println("Progression: Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7 @ 75 BPM");
   Serial.print("Initial volume: ");
   Serial.print(volumePercent);
   Serial.println("%");
   Serial.println("Audio task running on Core 1, Display task on Core 0");
   Serial.println();
-  Serial.println("Press BOOT button to cycle modes:");
-  Serial.println("  NOTE -> CHORD -> PROGRESSION -> NOTE...");
-  Serial.println("Progression: Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7 @ 75 BPM");
+  Serial.println("BOOT Button Controls:");
+  Serial.println("  Short press (<1s): Cycle waveform (SAW -> SQR -> TRI -> SIN)");
+  Serial.println("  Long press (>=1s): Cycle mode (PROG -> CHORD -> NOTE)");
   Serial.println();
 }
 
@@ -362,7 +398,8 @@ void audioTask(void *parameter) {
   const int frames = 512;  // Increased buffer size for smoother audio
   int16_t buffer[frames * 2];  // 2 samples per frame (L,R)
   static float phaseIndex = 0.0f;
-  const float phaseIncrement = (SINE_TABLE_SIZE * TONE_FREQUENCY) / (float)SAMPLE_RATE;
+  const int tableSize = Oscillator::getTableSize();
+  const float phaseIncrement = (tableSize * TONE_FREQUENCY) / (float)SAMPLE_RATE;
   
   while (true) {
     // Update volume from potentiometer
@@ -421,15 +458,15 @@ void audioTask(void *parameter) {
     
     // Generate samples based on current mode
     if (localMode == MODE_SINGLE_NOTE) {
-      // Single note mode - 880Hz sine wave
+      // Single note mode - use global oscillator
       for (int i = 0; i < frames; i++) {
         // Wrap phase index into table range
-        if (phaseIndex >= SINE_TABLE_SIZE) {
-          phaseIndex -= SINE_TABLE_SIZE;
+        if (phaseIndex >= tableSize) {
+          phaseIndex -= tableSize;
         }
         
         int idx = (int)phaseIndex;
-        int16_t sample = (int16_t)(sineTableNote[idx] * localAmplitude);
+        int16_t sample = (int16_t)(oscillator.getSample(idx) * localAmplitude);
         
         // Stereo: copy same sample to L and R
         buffer[i * 2 + 0] = sample;  // Left
@@ -469,15 +506,82 @@ void displayTask(void *parameter) {
   }
 }
 
-// ========== Main Loop (mostly idle now) ==========
+// ========== Main Loop ==========
 void loop() {
-  // Tasks are running on their respective cores
-  // Keep loop() minimal to avoid interfering with tasks
-  delay(1000);
+  // Handle button presses (short/long press detection)
+  handleButtonPress();
+  
+  // Keep loop minimal to avoid interfering with tasks
+  delay(10);
+}
+
+// ========== Draw Knob Animation ==========
+void drawKnobAnimation() {
+  display.clearDisplay();
+  
+  // Draw circular knob (centered)
+  int centerX = SCREEN_WIDTH / 2;
+  int centerY = SCREEN_HEIGHT / 2;
+  int knobRadius = 20;
+  
+  // Outer circle (double line for emphasis)
+  display.drawCircle(centerX, centerY, knobRadius, SSD1306_WHITE);
+  display.drawCircle(centerX, centerY, knobRadius - 1, SSD1306_WHITE);
+  
+  // Calculate pointer angle based on waveform (arranged like clock positions)
+  int angle = 0;
+  const char* waveName = "";
+  switch (currentGlobalWaveform) {
+    case OSC_SAWTOOTH: angle = 225; waveName = "SAW"; break;  // 7-8 o'clock
+    case OSC_SQUARE:   angle = 315; waveName = "SQR"; break;  // 10-11 o'clock
+    case OSC_TRIANGLE: angle = 45;  waveName = "TRI"; break;  // 1-2 o'clock
+    case OSC_SINE:     angle = 135; waveName = "SIN"; break;  // 4-5 o'clock
+  }
+  
+  // Draw pointer line from center (convert to radians, adjust for screen coordinates)
+  float radians = (angle - 90) * PI / 180.0f;  // -90 to start from top
+  int pointerX = centerX + (knobRadius - 5) * cos(radians);
+  int pointerY = centerY + (knobRadius - 5) * sin(radians);
+  display.drawLine(centerX, centerY, pointerX, pointerY, SSD1306_WHITE);
+  display.drawLine(centerX - 1, centerY, pointerX - 1, pointerY, SSD1306_WHITE);  // Thicker line
+  
+  // Draw dot at pointer end
+  display.fillCircle(pointerX, pointerY, 2, SSD1306_WHITE);
+  
+  // Draw center dot
+  display.fillCircle(centerX, centerY, 3, SSD1306_WHITE);
+  
+  // Draw position markers around the knob
+  for (int i = 0; i < 4; i++) {
+    int markerAngle = (i * 90 + 45) - 90;  // SAW, TRI, SIN, SQR positions
+    float markerRadians = markerAngle * PI / 180.0f;
+    int markerX = centerX + (knobRadius + 4) * cos(markerRadians);
+    int markerY = centerY + (knobRadius + 4) * sin(markerRadians);
+    display.fillCircle(markerX, markerY, 1, SSD1306_WHITE);
+  }
+  
+  // Draw waveform name at bottom
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  int textWidth = strlen(waveName) * 12;  // Approximate width
+  display.setCursor((SCREEN_WIDTH - textWidth) / 2, SCREEN_HEIGHT - 16);
+  display.print(waveName);
+  
+  display.display();
 }
 
 // ========== Update Display with Waveform ==========
 void updateDisplay() {
+  // Check if showing knob animation
+  if (showingKnobAnimation) {
+    if (millis() < knobAnimationEndTime) {
+      drawKnobAnimation();
+      return;
+    } else {
+      showingKnobAnimation = false;
+    }
+  }
+  
   // Read shared variables with mutex protection
   float localAmplitude;
   int localVolumePercent;

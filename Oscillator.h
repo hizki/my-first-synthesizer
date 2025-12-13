@@ -123,6 +123,20 @@ public:
   }
   
   /**
+   * Get a sample from the current waveform with custom amplitude scaling
+   * Useful for mixing multiple oscillators with different amplitudes
+   * @param index Table index (0 to TABLE_SIZE-1)
+   * @param customAmplitude Target amplitude for scaling
+   * @return 16-bit audio sample scaled to custom amplitude
+   */
+  int16_t getSampleScaled(int index, int16_t customAmplitude) const {
+    // Get normalized sample (-1.0 to 1.0)
+    float normalized = getSample(index) / (float)MAX_AMPLITUDE;
+    // Scale to custom amplitude
+    return (int16_t)(normalized * customAmplitude);
+  }
+  
+  /**
    * Get a sample from a specific waveform table at the given index
    * @param type Oscillator type
    * @param index Table index (0 to TABLE_SIZE-1)

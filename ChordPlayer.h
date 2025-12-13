@@ -3,6 +3,7 @@
  * 
  * Generates multi-note chords by mixing multiple sine wave oscillators.
  * Uses ChordLibrary for chord definitions - no hardcoded frequencies.
+ * Uses shared Oscillator for waveform generation - no duplication.
  * Each note has independent phase tracking and amplitude scaling to prevent clipping.
  */
 
@@ -11,14 +12,7 @@
 
 #include <Arduino.h>
 #include "ChordLibrary.h"
-
-// ========== Waveform Types ==========
-enum WaveformType {
-  WAVE_SINE,
-  WAVE_TRIANGLE,
-  WAVE_SQUARE,
-  WAVE_SAWTOOTH
-};
+#include "Oscillator.h"
 
 // ========== ChordPlayer Class ==========
 class ChordPlayer {
@@ -26,14 +20,8 @@ private:
   static const int TABLE_SIZE = 256;
   static const int16_t MAX_AMPLITUDE_PER_NOTE = 4666;  // 14000 / 3 notes to prevent clipping
   
-  // Waveform lookup tables (shared by all notes)
-  int16_t sineTable[TABLE_SIZE];
-  int16_t sawtoothTable[TABLE_SIZE];
-  int16_t triangleTable[TABLE_SIZE];
-  int16_t squareTable[TABLE_SIZE];
-  
-  // Current waveform type
-  WaveformType currentWaveform;
+  // Reference to shared Oscillator (no duplicate tables)
+  const Oscillator* sharedOscillator;
   
   // Current chord being played
   const Chord* currentChord;
@@ -64,39 +52,19 @@ private:
   
 public:
   /**
-   * Constructor - initializes with default chord (Cm7) and sine wave
+   * Constructor - initializes with default chord (Cm7)
    */
   ChordPlayer() : phase1(0.0f), phase2(0.0f), phase3(0.0f), 
                   currentChord(&ChordLib::CM7), storedSampleRate(44100.0f),
-                  currentWaveform(WAVE_SINE) {}
+                  sharedOscillator(nullptr) {}
   
   /**
-   * Build all waveform lookup tables
-   * Call this once during setup
+   * Set the shared oscillator reference
+   * Must be called before generating audio
+   * @param osc Pointer to the global Oscillator instance
    */
-  void buildTable() {
-    for (int i = 0; i < TABLE_SIZE; i++) {
-      float phase = (2.0f * PI * i) / TABLE_SIZE;
-      
-      // Sine wave
-      sineTable[i] = (int16_t)(sinf(phase) * MAX_AMPLITUDE_PER_NOTE);
-      
-      // Triangle wave
-      float triangleValue;
-      if (i < TABLE_SIZE / 2) {
-        triangleValue = (4.0f * i / TABLE_SIZE) - 1.0f;
-      } else {
-        triangleValue = 3.0f - (4.0f * i / TABLE_SIZE);
-      }
-      triangleTable[i] = (int16_t)(triangleValue * MAX_AMPLITUDE_PER_NOTE);
-      
-      // Square wave
-      squareTable[i] = (i < TABLE_SIZE / 2) ? MAX_AMPLITUDE_PER_NOTE : -MAX_AMPLITUDE_PER_NOTE;
-      
-      // Sawtooth wave
-      float sawtoothValue = (2.0f * i / TABLE_SIZE) - 1.0f;
-      sawtoothTable[i] = (int16_t)(sawtoothValue * MAX_AMPLITUDE_PER_NOTE);
-    }
+  void setOscillator(const Oscillator* osc) {
+    sharedOscillator = osc;
   }
   
   /**
@@ -119,20 +87,6 @@ public:
     }
   }
   
-  /**
-   * Set waveform type
-   * @param waveform Waveform type to use
-   */
-  void setWaveform(WaveformType waveform) {
-    currentWaveform = waveform;
-  }
-  
-  /**
-   * Get current waveform type
-   */
-  WaveformType getWaveform() const {
-    return currentWaveform;
-  }
   
   /**
    * Set chord by index from progression
@@ -147,28 +101,23 @@ public:
   
   /**
    * Generate a single mixed sample from all three notes
+   * Uses shared Oscillator for waveform generation
    * @return 16-bit audio sample (sum of all notes)
    */
   int16_t getNextSample() {
+    if (sharedOscillator == nullptr) {
+      return 0;  // Safety check
+    }
+    
     // Wrap phase accumulators
     if (phase1 >= TABLE_SIZE) phase1 -= TABLE_SIZE;
     if (phase2 >= TABLE_SIZE) phase2 -= TABLE_SIZE;
     if (phase3 >= TABLE_SIZE) phase3 -= TABLE_SIZE;
     
-    // Select the appropriate waveform table
-    int16_t* waveTable;
-    switch (currentWaveform) {
-      case WAVE_SINE:     waveTable = sineTable; break;
-      case WAVE_TRIANGLE: waveTable = triangleTable; break;
-      case WAVE_SQUARE:   waveTable = squareTable; break;
-      case WAVE_SAWTOOTH: waveTable = sawtoothTable; break;
-      default:            waveTable = sineTable; break;
-    }
-    
-    // Get samples from each note using selected waveform
-    int16_t sample1 = waveTable[(int)phase1];
-    int16_t sample2 = waveTable[(int)phase2];
-    int16_t sample3 = waveTable[(int)phase3];
+    // Get scaled samples from shared oscillator (uses current oscillator waveform)
+    int16_t sample1 = sharedOscillator->getSampleScaled((int)phase1, MAX_AMPLITUDE_PER_NOTE);
+    int16_t sample2 = sharedOscillator->getSampleScaled((int)phase2, MAX_AMPLITUDE_PER_NOTE);
+    int16_t sample3 = sharedOscillator->getSampleScaled((int)phase3, MAX_AMPLITUDE_PER_NOTE);
     
     // Advance phase accumulators
     phase1 += phaseIncrement1;
@@ -212,15 +161,19 @@ public:
   
   /**
    * Get display value for visualization (mixed waveform)
+   * Uses shared Oscillator's display method for current waveform
    * @param time Time value for animation
    * @return Normalized value for display
    */
   float getDisplayValue(float time) const {
-    if (currentChord == nullptr) return 0.0f;
+    if (currentChord == nullptr || sharedOscillator == nullptr) {
+      return 0.0f;
+    }
     
-    float val1 = sin(TWO_PI * currentChord->note1 * time);
-    float val2 = sin(TWO_PI * currentChord->note2 * time);
-    float val3 = sin(TWO_PI * currentChord->note3 * time);
+    // Calculate combined waveform using Oscillator's display method
+    float val1 = sharedOscillator->getDisplayValue(TWO_PI * currentChord->note1 * time);
+    float val2 = sharedOscillator->getDisplayValue(TWO_PI * currentChord->note2 * time);
+    float val3 = sharedOscillator->getDisplayValue(TWO_PI * currentChord->note3 * time);
     
     return (val1 + val2 + val3) / 3.0f;  // Average for display
   }
