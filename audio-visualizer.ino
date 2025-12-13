@@ -116,6 +116,10 @@ const unsigned long DEBOUNCE_DELAY = 50;  // 50ms debounce
 // ========== Knob Animation ==========
 unsigned long knobAnimationEndTime = 0;
 bool showingKnobAnimation = false;
+float previousWaveformAngle = 225.0f;  // Start at SAWTOOTH position
+float targetWaveformAngle = 225.0f;
+unsigned long knobAnimationStartTime = 0;
+const unsigned long KNOB_ANIMATION_DURATION_MS = 450;  // Animation duration
 
 // ========== Chord Progression Timing ==========
 unsigned long lastChordChangeTime = 0;
@@ -126,8 +130,32 @@ int currentProgressionLength = ChordLib::JAZZ_PROGRESSION_1_LENGTH;
 
 // NOTE: Single note mode now uses global oscillator - no separate tables needed
 
+// ========== Angle Helper Functions ==========
+float getWaveformAngle(OscillatorType type) {
+  switch (type) {
+    case OSC_SAWTOOTH: return 225.0f;  // 7-8 o'clock
+    case OSC_SQUARE:   return 315.0f;  // 10-11 o'clock
+    case OSC_TRIANGLE: return 45.0f;   // 1-2 o'clock
+    case OSC_SINE:     return 135.0f;  // 4-5 o'clock
+    default:           return 225.0f;
+  }
+}
+
+float getShortestAnglePath(float from, float to) {
+  float delta = to - from;
+  
+  // Normalize to [-180, 180] range to find shortest path
+  while (delta > 180.0f) delta -= 360.0f;
+  while (delta < -180.0f) delta += 360.0f;
+  
+  return delta;
+}
+
 // ========== Waveform Cycling ==========
 void cycleWaveform() {
+  // Store previous angle before changing waveform
+  previousWaveformAngle = getWaveformAngle(currentGlobalWaveform);
+  
   switch (currentGlobalWaveform) {
     case OSC_SAWTOOTH: currentGlobalWaveform = OSC_SQUARE; break;
     case OSC_SQUARE:   currentGlobalWaveform = OSC_TRIANGLE; break;
@@ -135,12 +163,16 @@ void cycleWaveform() {
     case OSC_SINE:     currentGlobalWaveform = OSC_SAWTOOTH; break;
   }
   
+  // Store target angle after changing waveform
+  targetWaveformAngle = getWaveformAngle(currentGlobalWaveform);
+  
   // Update global oscillator type
   oscillator.setType(currentGlobalWaveform);
   
-  // Show knob animation
+  // Show knob animation (450ms animation + 500ms hold = 950ms total)
   showingKnobAnimation = true;
-  knobAnimationEndTime = millis() + 500;
+  knobAnimationStartTime = millis();
+  knobAnimationEndTime = millis() + 950;
   
   // Log change
   Serial.print("Waveform: ");
@@ -528,18 +560,31 @@ void drawKnobAnimation() {
   display.drawCircle(centerX, centerY, knobRadius, SSD1306_WHITE);
   display.drawCircle(centerX, centerY, knobRadius - 1, SSD1306_WHITE);
   
-  // Calculate pointer angle based on waveform (arranged like clock positions)
-  int angle = 0;
+  // Calculate current angle based on animation progress
+  unsigned long elapsed = millis() - knobAnimationStartTime;
+  float currentAngle;
+  
+  if (elapsed < KNOB_ANIMATION_DURATION_MS) {
+    // Animating - interpolate between previous and target angles
+    float progress = (float)elapsed / (float)KNOB_ANIMATION_DURATION_MS;
+    float angleDelta = getShortestAnglePath(previousWaveformAngle, targetWaveformAngle);
+    currentAngle = previousWaveformAngle + (angleDelta * progress);
+  } else {
+    // Animation complete - use target angle (static hold period)
+    currentAngle = targetWaveformAngle;
+  }
+  
+  // Get waveform name for display
   const char* waveName = "";
   switch (currentGlobalWaveform) {
-    case OSC_SAWTOOTH: angle = 225; waveName = "SAW"; break;  // 7-8 o'clock
-    case OSC_SQUARE:   angle = 315; waveName = "SQR"; break;  // 10-11 o'clock
-    case OSC_TRIANGLE: angle = 45;  waveName = "TRI"; break;  // 1-2 o'clock
-    case OSC_SINE:     angle = 135; waveName = "SIN"; break;  // 4-5 o'clock
+    case OSC_SAWTOOTH: waveName = "SAW"; break;
+    case OSC_SQUARE:   waveName = "SQR"; break;
+    case OSC_TRIANGLE: waveName = "TRI"; break;
+    case OSC_SINE:     waveName = "SIN"; break;
   }
   
   // Draw pointer line from center (convert to radians, adjust for screen coordinates)
-  float radians = (angle - 90) * PI / 180.0f;  // -90 to start from top
+  float radians = (currentAngle - 90) * PI / 180.0f;  // -90 to start from top
   int pointerX = centerX + (knobRadius - 5) * cos(radians);
   int pointerY = centerY + (knobRadius - 5) * sin(radians);
   display.drawLine(centerX, centerY, pointerX, pointerY, SSD1306_WHITE);
