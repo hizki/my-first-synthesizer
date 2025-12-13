@@ -46,6 +46,7 @@
 // NOTE: Oscillator.h is preserved for future multi-waveform feature
 // Currently using ChordPlayer for chord mode implementation
 // #include "Oscillator.h"  // PRESERVED - will be restored when adding waveform selection
+#include "ChordLibrary.h"
 #include "ChordPlayer.h"
 
 // ========== OLED Display Configuration ==========
@@ -103,8 +104,9 @@ volatile PlayMode currentMode = MODE_SINGLE_NOTE;  // Current play mode
 // ========== Chord Progression Timing ==========
 unsigned long lastChordChangeTime = 0;
 const unsigned long CHORD_DURATION_MS = 1600;  // 1.6 seconds (half note at 75 BPM)
-volatile int currentChordIndex = 0;  // 0=Cm7, 1=Ebmaj7, 2=Abmaj7
-const int NUM_CHORDS_IN_PROGRESSION = 3;
+volatile int currentChordIndex = 0;
+const Chord* const* currentProgression = ChordLib::JAZZ_PROGRESSION_1;
+int currentProgressionLength = ChordLib::JAZZ_PROGRESSION_1_LENGTH;
 
 // ========== Single Note Generation (for NOTE mode) ==========
 const int SINE_TABLE_SIZE = 256;
@@ -145,15 +147,15 @@ void IRAM_ATTR onBootButtonPress() {
     if (currentMode == MODE_SINGLE_NOTE) {
       currentMode = MODE_CHORD;
       chordPlayer.reset();
-      chordPlayer.setChord(0);  // Set to Cm7
+      chordPlayer.setChord(&ChordLib::CM7);  // Set to Cm7
       Serial.println("Mode: CHORD (Cm7)");
     } else if (currentMode == MODE_CHORD) {
       currentMode = MODE_PROGRESSION;
       currentChordIndex = 0;  // Start with first chord
-      chordPlayer.setChord(0);  // Start with Cm7
+      chordPlayer.setChordFromProgression(0, currentProgression, currentProgressionLength);
       chordPlayer.reset();
       lastChordChangeTime = millis();  // Initialize timing
-      Serial.println("Mode: PROGRESSION (Cm7 -> Ebmaj7 -> Abmaj7)");
+      Serial.println("Mode: PROGRESSION (Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7)");
     } else {
       currentMode = MODE_SINGLE_NOTE;
       Serial.println("Mode: NOTE (880Hz)");
@@ -338,7 +340,7 @@ void setup() {
   Serial.println();
   Serial.println("Press BOOT button to cycle modes:");
   Serial.println("  NOTE -> CHORD -> PROGRESSION -> NOTE...");
-  Serial.println("Progression: Cm7 -> Ebmaj7 -> Abmaj7 @ 75 BPM");
+  Serial.println("Progression: Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7 @ 75 BPM");
   Serial.println();
 }
 
@@ -385,13 +387,13 @@ void audioTask(void *parameter) {
       unsigned long currentTime = millis();
       if (currentTime - lastChordChangeTime >= CHORD_DURATION_MS) {
         // Time to switch to next chord
-        currentChordIndex = (currentChordIndex + 1) % NUM_CHORDS_IN_PROGRESSION;
-        chordPlayer.setChord(currentChordIndex);
+        currentChordIndex = (currentChordIndex + 1) % currentProgressionLength;
+        chordPlayer.setChordFromProgression(currentChordIndex, currentProgression, currentProgressionLength);
         lastChordChangeTime = currentTime;
         
         // Log chord changes
         Serial.print("Progression: ");
-        Serial.println(ChordPlayer::getChordName(currentChordIndex));
+        Serial.println(chordPlayer.getChordName());
       }
     }
     
@@ -495,8 +497,6 @@ void updateDisplay() {
   if (localMode == MODE_SINGLE_NOTE) {
     display.print(TONE_FREQUENCY, 0);
     display.print("Hz");
-  } else if (localMode == MODE_PROGRESSION) {
-    display.print(ChordPlayer::getChordName(localChordIndex));
   } else {
     display.print(chordPlayer.getChordName());
   }
@@ -516,7 +516,7 @@ void updateDisplay() {
     display.setCursor(SCREEN_WIDTH - 24, 0);
     display.print(localChordIndex + 1);
     display.print("/");
-    display.print(NUM_CHORDS_IN_PROGRESSION);
+    display.print(currentProgressionLength);
   }
   
   // Draw volume percentage at top right (skip if in progression mode)
