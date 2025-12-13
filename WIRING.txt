@@ -1,0 +1,58 @@
+ESP32 Audio Visualizer - Wiring Guide
+=====================================
+
+MAX98357A I2S AMPLIFIER:
+-------------------------
+  BCLK  →  GPIO 26  (Bit Clock)
+  LRC   →  GPIO 25  (Left/Right Clock / Word Select)
+  DIN   →  GPIO 22  (Data In)
+  VIN   →  3.3V     (Power - can also use 5V)
+  GND   →  GND      (Ground)
+  GAIN  →  Leave unconnected (or GND/3.3V for different gain levels)
+  SD    →  Not connected (or 3.3V to enable shutdown control)
+
+OLED DISPLAY (SSD1306):
+-----------------------
+  SCL   →  GPIO 19  (I2C Clock - custom pin to avoid I2S conflict)
+  SDA   →  GPIO 21  (I2C Data - standard pin)
+  VCC   →  3.3V     (Power)
+  GND   →  GND      (Ground)
+
+POTENTIOMETER (10kΩ Volume Control):
+------------------------------------
+  Pin 1 (one side)  →  3.3V      (Power)
+  Pin 2 (wiper)     →  GPIO 4    (Analog input / D4)
+  Pin 3 (other side) →  GND      (Ground)
+
+  Note: Orient the potentiometer so that turning clockwise
+        increases the voltage on the wiper (increases volume).
+
+SPEAKER/OUTPUT:
+---------------
+Connect to MAX98357A screw terminals:
+  + (positive) → Speaker positive terminal
+  - (negative) → Speaker negative terminal
+
+NOTES:
+------
+• GPIO 19 is used for I2C SCL instead of the typical GPIO 22
+  because GPIO 22 is needed for I2S data output (DIN).
+
+• GPIO 4 is an ADC-capable pin used to read the potentiometer.
+
+• The MAX98357A can be powered from either 3.3V or 5V.
+  5V provides more output power if needed.
+
+• Make sure all ground connections are common.
+
+• If your OLED display doesn't initialize, try changing
+  OLED_ADDRESS to 0x3D in the code (line 44).
+
+POTENTIOMETER TIPS:
+------------------
+• Use a 10kΩ linear potentiometer for smooth volume control.
+• Make sure to connect 3.3V and GND correctly - reversed
+  connections won't damage anything but volume will work backwards.
+• The ADC reads 0-4095, which is mapped to 0-100% volume.
+• Smoothing is applied in software to reduce jitter.
+
