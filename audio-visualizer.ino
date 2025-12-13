@@ -29,7 +29,7 @@
  * 
  * BOOT Button:
  *   GPIO 0 (built-in on ESP32-WROOM-32)
- *   Press to cycle through oscillator types: SINE -> TRIANGLE -> SQUARE -> SAWTOOTH
+ *   Press to toggle between NOTE mode (single tone) and CHORD mode (Cm7 chord)
  * 
  * Libraries Required:
  * - Adafruit GFX Library
@@ -42,7 +42,11 @@
 #include <Adafruit_SSD1306.h>
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
-#include "Oscillator.h"
+
+// NOTE: Oscillator.h is preserved for future multi-waveform feature
+// Currently using ChordPlayer for chord mode implementation
+// #include "Oscillator.h"  // PRESERVED - will be restored when adding waveform selection
+#include "ChordPlayer.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -67,6 +71,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ========== Button Configuration ==========
 #define BOOT_BUTTON 0    // BOOT button (GPIO 0)
 
+// ========== Play Mode ==========
+enum PlayMode {
+  MODE_SINGLE_NOTE,
+  MODE_CHORD,
+  MODE_PROGRESSION
+};
+
 // ========== Audio Configuration ==========
 #define I2S_PORT        I2S_NUM_0
 #define SAMPLE_RATE     44100          // 44.1 kHz
@@ -80,12 +91,25 @@ TaskHandle_t audioTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
 SemaphoreHandle_t volumeMutex = NULL;
 
-// ========== Oscillator ==========
-Oscillator oscillator;
+// ========== Audio Generators ==========
+// Oscillator oscillator;  // PRESERVED - for future multi-waveform feature
+ChordPlayer chordPlayer;
 
 // ========== Shared Variables ==========
 float currentAmplitude = 1.0f;        // Current amplitude multiplier (0.0 to 1.0)
 int volumePercent = 100;              // Current volume percentage
+volatile PlayMode currentMode = MODE_SINGLE_NOTE;  // Current play mode
+
+// ========== Chord Progression Timing ==========
+unsigned long lastChordChangeTime = 0;
+const unsigned long CHORD_DURATION_MS = 1600;  // 1.6 seconds (half note at 75 BPM)
+volatile int currentChordIndex = 0;  // 0=Cm7, 1=Ebmaj7, 2=Abmaj7
+const int NUM_CHORDS_IN_PROGRESSION = 3;
+
+// ========== Single Note Generation (for NOTE mode) ==========
+const int SINE_TABLE_SIZE = 256;
+int16_t sineTableNote[SINE_TABLE_SIZE];
+const int16_t MAX_AMPLITUDE_SINGLE = 14000;
 
 
 // ========== Read Volume from Potentiometer ==========
@@ -117,8 +141,23 @@ void IRAM_ATTR onBootButtonPress() {
   
   // Debounce: ignore if button pressed within 250ms
   if (interruptTime - lastInterruptTime > 250) {
-    // Cycle to next oscillator type
-    oscillator.nextType();
+    // Cycle through 3 modes: NOTE -> CHORD -> PROGRESSION -> NOTE...
+    if (currentMode == MODE_SINGLE_NOTE) {
+      currentMode = MODE_CHORD;
+      chordPlayer.reset();
+      chordPlayer.setChord(0);  // Set to Cm7
+      Serial.println("Mode: CHORD (Cm7)");
+    } else if (currentMode == MODE_CHORD) {
+      currentMode = MODE_PROGRESSION;
+      currentChordIndex = 0;  // Start with first chord
+      chordPlayer.setChord(0);  // Start with Cm7
+      chordPlayer.reset();
+      lastChordChangeTime = millis();  // Initialize timing
+      Serial.println("Mode: PROGRESSION (Cm7 -> Ebmaj7 -> Abmaj7)");
+    } else {
+      currentMode = MODE_SINGLE_NOTE;
+      Serial.println("Mode: NOTE (880Hz)");
+    }
     lastInterruptTime = interruptTime;
   }
 }
@@ -239,9 +278,17 @@ void setup() {
   // Initialize display first
   setupDisplay();
   
-  // Build oscillator waveform tables
-  oscillator.buildTables();
-  Serial.println("Oscillator waveform tables built");
+  // Build sine table for single note mode
+  for (int i = 0; i < SINE_TABLE_SIZE; i++) {
+    float phase = (2.0f * PI * i) / SINE_TABLE_SIZE;
+    sineTableNote[i] = (int16_t)(sinf(phase) * MAX_AMPLITUDE_SINGLE);
+  }
+  Serial.println("Single note sine table built");
+  
+  // Initialize chord player
+  chordPlayer.buildTable();
+  chordPlayer.init(SAMPLE_RATE);
+  Serial.println("Chord player initialized");
   
   // Initialize I2S audio
   setupI2S();
@@ -279,13 +326,19 @@ void setup() {
     0                    // Core 0
   );
 
-  Serial.print("Setup complete. Playing ");
+  Serial.println("Setup complete!");
+  Serial.println("Mode: NOTE (single tone)");
+  Serial.print("Frequency: ");
   Serial.print(TONE_FREQUENCY, 0);
-  Serial.println(" Hz sine wave.");
+  Serial.println(" Hz");
   Serial.print("Initial volume: ");
   Serial.print(volumePercent);
   Serial.println("%");
   Serial.println("Audio task running on Core 1, Display task on Core 0");
+  Serial.println();
+  Serial.println("Press BOOT button to cycle modes:");
+  Serial.println("  NOTE -> CHORD -> PROGRESSION -> NOTE...");
+  Serial.println("Progression: Cm7 -> Ebmaj7 -> Abmaj7 @ 75 BPM");
   Serial.println();
 }
 
@@ -297,8 +350,7 @@ void audioTask(void *parameter) {
   const int frames = 512;  // Increased buffer size for smoother audio
   int16_t buffer[frames * 2];  // 2 samples per frame (L,R)
   static float phaseIndex = 0.0f;
-  const int tableSize = Oscillator::getTableSize();
-  const float phaseIncrement = (tableSize * TONE_FREQUENCY) / (float)SAMPLE_RATE;
+  const float phaseIncrement = (SINE_TABLE_SIZE * TONE_FREQUENCY) / (float)SAMPLE_RATE;
   
   while (true) {
     // Update volume from potentiometer
@@ -328,29 +380,60 @@ void audioTask(void *parameter) {
       xSemaphoreGive(volumeMutex);
     }
     
+    // Handle chord progression timing (only in PROGRESSION mode)
+    if (currentMode == MODE_PROGRESSION) {
+      unsigned long currentTime = millis();
+      if (currentTime - lastChordChangeTime >= CHORD_DURATION_MS) {
+        // Time to switch to next chord
+        currentChordIndex = (currentChordIndex + 1) % NUM_CHORDS_IN_PROGRESSION;
+        chordPlayer.setChord(currentChordIndex);
+        lastChordChangeTime = currentTime;
+        
+        // Log chord changes
+        Serial.print("Progression: ");
+        Serial.println(ChordPlayer::getChordName(currentChordIndex));
+      }
+    }
+    
     // Generate audio buffer
     float localAmplitude;
+    PlayMode localMode;
     if (xSemaphoreTake(volumeMutex, pdMS_TO_TICKS(1)) == pdTRUE) {
       localAmplitude = currentAmplitude;
+      localMode = currentMode;
       xSemaphoreGive(volumeMutex);
     } else {
       localAmplitude = 1.0f;  // Fallback
+      localMode = MODE_SINGLE_NOTE;
     }
     
-    for (int i = 0; i < frames; i++) {
-      // Wrap phase index into table range
-      if (phaseIndex >= tableSize) {
-        phaseIndex -= tableSize;
+    // Generate samples based on current mode
+    if (localMode == MODE_SINGLE_NOTE) {
+      // Single note mode - 880Hz sine wave
+      for (int i = 0; i < frames; i++) {
+        // Wrap phase index into table range
+        if (phaseIndex >= SINE_TABLE_SIZE) {
+          phaseIndex -= SINE_TABLE_SIZE;
+        }
+        
+        int idx = (int)phaseIndex;
+        int16_t sample = (int16_t)(sineTableNote[idx] * localAmplitude);
+        
+        // Stereo: copy same sample to L and R
+        buffer[i * 2 + 0] = sample;  // Left
+        buffer[i * 2 + 1] = sample;  // Right
+        
+        phaseIndex += phaseIncrement;
       }
-      
-      int idx = (int)phaseIndex;
-      int16_t sample = (int16_t)(oscillator.getSample(idx) * localAmplitude);
-      
-      // Stereo: copy same sample to L and R
-      buffer[i * 2 + 0] = sample;  // Left
-      buffer[i * 2 + 1] = sample;  // Right
-      
-      phaseIndex += phaseIncrement;
+    } else if (localMode == MODE_CHORD || localMode == MODE_PROGRESSION) {
+      // Chord modes - use ChordPlayer (handles both static and progression)
+      for (int i = 0; i < frames; i++) {
+        int16_t sample = (int16_t)(chordPlayer.getNextSample() * localAmplitude);
+        
+        // Stereo: copy same sample to L and R
+        buffer[i * 2 + 0] = sample;  // Left
+        buffer[i * 2 + 1] = sample;  // Right
+      }
     }
     
     // Output audio through I2S
@@ -386,35 +469,63 @@ void updateDisplay() {
   // Read shared variables with mutex protection
   float localAmplitude;
   int localVolumePercent;
+  PlayMode localMode;
+  int localChordIndex;
   
   if (xSemaphoreTake(volumeMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
     localAmplitude = currentAmplitude;
     localVolumePercent = volumePercent;
+    localMode = currentMode;
+    localChordIndex = currentChordIndex;
     xSemaphoreGive(volumeMutex);
   } else {
     // Fallback if mutex unavailable
     localAmplitude = 1.0f;
     localVolumePercent = 100;
+    localMode = MODE_SINGLE_NOTE;
+    localChordIndex = 0;
   }
   
   display.clearDisplay();
   
-  // Draw frequency at top left
+  // Draw frequency/chord name at top left
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 0);
-  display.print(TONE_FREQUENCY, 0);
-  display.print("Hz");
+  if (localMode == MODE_SINGLE_NOTE) {
+    display.print(TONE_FREQUENCY, 0);
+    display.print("Hz");
+  } else if (localMode == MODE_PROGRESSION) {
+    display.print(ChordPlayer::getChordName(localChordIndex));
+  } else {
+    display.print(chordPlayer.getChordName());
+  }
   
-  // Draw oscillator type in the middle top
+  // Draw mode in the middle top
   display.setCursor(52, 0);
-  display.print(oscillator.getTypeName());
+  if (localMode == MODE_SINGLE_NOTE) {
+    display.print("NOTE");
+  } else if (localMode == MODE_CHORD) {
+    display.print("CHORD");
+  } else {
+    display.print("PROG");
+  }
   
-  // Draw volume percentage at top right
-  display.setCursor(SCREEN_WIDTH - 36, 0);
-  display.print("V:");
-  display.print(localVolumePercent);
-  display.print("%");
+  // Draw progression position if in progression mode
+  if (localMode == MODE_PROGRESSION) {
+    display.setCursor(SCREEN_WIDTH - 24, 0);
+    display.print(localChordIndex + 1);
+    display.print("/");
+    display.print(NUM_CHORDS_IN_PROGRESSION);
+  }
+  
+  // Draw volume percentage at top right (skip if in progression mode)
+  if (localMode != MODE_PROGRESSION) {
+    display.setCursor(SCREEN_WIDTH - 36, 0);
+    display.print("V:");
+    display.print(localVolumePercent);
+    display.print("%");
+  }
   
   // Draw volume bar indicator
   int barWidth = (localVolumePercent * (SCREEN_WIDTH - 4)) / 100;
@@ -437,26 +548,46 @@ void updateDisplay() {
   float waveAmplitude = 18.0f * localAmplitude;  // Max 18 pixels height
   
   for (int x = 0; x < SCREEN_WIDTH; x++) {
-    // Calculate waveform value based on oscillator type
-    float angle = (TWO_PI * 2 * x / SCREEN_WIDTH) + animPhase;
-    float waveValue = oscillator.getDisplayValue(angle);
+    float waveValue;
+    
+    if (localMode == MODE_SINGLE_NOTE) {
+      // Single sine wave for note mode
+      float angle = (TWO_PI * 2 * x / SCREEN_WIDTH) + animPhase;
+      waveValue = sin(angle);
+    } else {
+      // Combined waveform for chord modes
+      float time = (x / (float)SCREEN_WIDTH) * 0.1f + animPhase * 0.01f;
+      waveValue = chordPlayer.getDisplayValue(time);
+    }
     
     int y = centerY - (int)(waveAmplitude * waveValue);
     
     // Draw the waveform
     if (x > 0) {
-      float prevAngle = (TWO_PI * 2 * (x - 1) / SCREEN_WIDTH) + animPhase;
-      float prevWaveValue = oscillator.getDisplayValue(prevAngle);
+      float prevWaveValue;
+      if (localMode == MODE_SINGLE_NOTE) {
+        float prevAngle = (TWO_PI * 2 * (x - 1) / SCREEN_WIDTH) + animPhase;
+        prevWaveValue = sin(prevAngle);
+      } else {
+        float prevTime = ((x - 1) / (float)SCREEN_WIDTH) * 0.1f + animPhase * 0.01f;
+        prevWaveValue = chordPlayer.getDisplayValue(prevTime);
+      }
       
       int prevY = centerY - (int)(waveAmplitude * prevWaveValue);
       display.drawLine(x - 1, prevY, x, y, SSD1306_WHITE);
     }
   }
   
-  // Draw "A4" label at bottom left
+  // Draw mode label at bottom left
   display.setTextSize(1);
   display.setCursor(0, SCREEN_HEIGHT - 8);
-  display.print("A4 Note");
+  if (localMode == MODE_SINGLE_NOTE) {
+    display.print("A5 Note");
+  } else if (localMode == MODE_PROGRESSION) {
+    display.print("75 BPM");
+  } else {
+    display.print("3 Notes");
+  }
   
   // Show mute indicator if volume is zero
   if (localVolumePercent == 0) {
