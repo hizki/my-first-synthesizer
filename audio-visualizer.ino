@@ -51,6 +51,7 @@
 #include "Oscillator.h"
 #include "ChordLibrary.h"
 #include "ChordPlayer.h"
+#include "Gauge.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -116,8 +117,8 @@ const unsigned long DEBOUNCE_DELAY = 50;  // 50ms debounce
 // ========== Knob Animation ==========
 unsigned long knobAnimationEndTime = 0;
 bool showingKnobAnimation = false;
-float previousWaveformAngle = 225.0f;  // Start at SAWTOOTH position
-float targetWaveformAngle = 225.0f;
+float previousWaveformAngle = 180.0f;  // Start at SAWTOOTH position (arc system)
+float targetWaveformAngle = 180.0f;
 unsigned long knobAnimationStartTime = 0;
 const unsigned long KNOB_ANIMATION_DURATION_MS = 450;  // Animation duration
 
@@ -130,18 +131,30 @@ int currentProgressionLength = ChordLib::JAZZ_PROGRESSION_1_LENGTH;
 
 // NOTE: Single note mode now uses global oscillator - no separate tables needed
 
+// ========== Gauge Display ==========
+Gauge gauge;
+const char* WAVEFORM_LABELS[] = {"SAW", "SQR", "TRI", "SIN"};
+const float WAVEFORM_ANGLES[] = {180.0f, 120.0f, 60.0f, 0.0f};
+const int NUM_WAVEFORMS = 4;
+
 // ========== Angle Helper Functions ==========
+// Arc gauge: 180° (left) to 0° (right), spanning top half like a speedometer
 float getWaveformAngle(OscillatorType type) {
   switch (type) {
-    case OSC_SAWTOOTH: return 225.0f;  // 7-8 o'clock
-    case OSC_SQUARE:   return 315.0f;  // 10-11 o'clock
-    case OSC_TRIANGLE: return 45.0f;   // 1-2 o'clock
-    case OSC_SINE:     return 135.0f;  // 4-5 o'clock
-    default:           return 225.0f;
+    case OSC_SAWTOOTH: return 180.0f;  // Left position (0%)
+    case OSC_SQUARE:   return 120.0f;  // 1/3 position (33%)
+    case OSC_TRIANGLE: return 60.0f;   // 2/3 position (66%)
+    case OSC_SINE:     return 0.0f;    // Right position (100%)
+    default:           return 180.0f;
   }
 }
 
 float getShortestAnglePath(float from, float to) {
+  // Special case: SINE (0°) back to SAWTOOTH (180°) - go all the way back counterclockwise
+  if (from == 0.0f && to == 180.0f) {
+    return -180.0f;  // Go counterclockwise through the full sweep
+  }
+  
   float delta = to - from;
   
   // Normalize to [-180, 180] range to find shortest path
@@ -356,6 +369,11 @@ void setup() {
   // Initialize display first
   setupDisplay();
   
+  // Initialize gauge with display reference and configuration
+  gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
+             WAVEFORM_LABELS, NUM_WAVEFORMS, WAVEFORM_ANGLES);
+  Serial.println("Gauge initialized");
+  
   // Build waveform tables once in global oscillator
   oscillator.buildTables();
   oscillator.setType(OSC_SAWTOOTH);  // Default waveform
@@ -551,15 +569,6 @@ void loop() {
 void drawKnobAnimation() {
   display.clearDisplay();
   
-  // Draw circular knob (centered)
-  int centerX = SCREEN_WIDTH / 2;
-  int centerY = SCREEN_HEIGHT / 2;
-  int knobRadius = 20;
-  
-  // Outer circle (double line for emphasis)
-  display.drawCircle(centerX, centerY, knobRadius, SSD1306_WHITE);
-  display.drawCircle(centerX, centerY, knobRadius - 1, SSD1306_WHITE);
-  
   // Calculate current angle based on animation progress
   unsigned long elapsed = millis() - knobAnimationStartTime;
   float currentAngle;
@@ -574,6 +583,10 @@ void drawKnobAnimation() {
     currentAngle = targetWaveformAngle;
   }
   
+  // Update and draw the gauge
+  gauge.setAngle(currentAngle);
+  gauge.draw();
+  
   // Get waveform name for display
   const char* waveName = "";
   switch (currentGlobalWaveform) {
@@ -583,29 +596,7 @@ void drawKnobAnimation() {
     case OSC_SINE:     waveName = "SIN"; break;
   }
   
-  // Draw pointer line from center (convert to radians, adjust for screen coordinates)
-  float radians = (currentAngle - 90) * PI / 180.0f;  // -90 to start from top
-  int pointerX = centerX + (knobRadius - 5) * cos(radians);
-  int pointerY = centerY + (knobRadius - 5) * sin(radians);
-  display.drawLine(centerX, centerY, pointerX, pointerY, SSD1306_WHITE);
-  display.drawLine(centerX - 1, centerY, pointerX - 1, pointerY, SSD1306_WHITE);  // Thicker line
-  
-  // Draw dot at pointer end
-  display.fillCircle(pointerX, pointerY, 2, SSD1306_WHITE);
-  
-  // Draw center dot
-  display.fillCircle(centerX, centerY, 3, SSD1306_WHITE);
-  
-  // Draw position markers around the knob
-  for (int i = 0; i < 4; i++) {
-    int markerAngle = (i * 90 + 45) - 90;  // SAW, TRI, SIN, SQR positions
-    float markerRadians = markerAngle * PI / 180.0f;
-    int markerX = centerX + (knobRadius + 4) * cos(markerRadians);
-    int markerY = centerY + (knobRadius + 4) * sin(markerRadians);
-    display.fillCircle(markerX, markerY, 1, SSD1306_WHITE);
-  }
-  
-  // Draw waveform name at bottom
+  // Draw waveform name at bottom center
   display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
   int textWidth = strlen(waveName) * 12;  // Approximate width
