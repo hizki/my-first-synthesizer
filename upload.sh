@@ -45,12 +45,13 @@ echo ""
 
 # Board configuration
 FQBN="esp32:esp32:esp32"
+UPLOAD_SPEED="115200"  # Slower speed for more reliable uploads
 
 if [ "$ARDUINO_CMD" = "arduino-cli" ]; then
-    echo "Compiling and uploading with arduino-cli..."
+    echo "Compiling and uploading with arduino-cli (baud rate: $UPLOAD_SPEED)..."
     echo ""
     arduino-cli compile --fqbn $FQBN . && \
-    arduino-cli upload --fqbn $FQBN --port $PORT .
+    arduino-cli upload --fqbn $FQBN --port $PORT --upload-property upload.speed=$UPLOAD_SPEED .
 else
     echo "Compiling and uploading with Arduino IDE..."
     echo ""

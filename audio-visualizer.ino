@@ -27,6 +27,10 @@
  *   Wiper     -> GPIO 4 (D4)
  *   Other side -> GND
  * 
+ * BOOT Button:
+ *   GPIO 0 (built-in on ESP32-WROOM-32)
+ *   Press to cycle through oscillator types: SINE -> TRIANGLE -> SQUARE -> SAWTOOTH
+ * 
  * Libraries Required:
  * - Adafruit GFX Library
  * - Adafruit SSD1306
@@ -38,6 +42,7 @@
 #include <Adafruit_SSD1306.h>
 #include "driver/i2s_std.h"
 #include "driver/gpio.h"
+#include "Oscillator.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -62,21 +67,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ========== Button Configuration ==========
 #define BOOT_BUTTON 0    // BOOT button (GPIO 0)
 
-// ========== Oscillator Types ==========
-enum OscillatorType {
-  OSC_SINE = 0,
-  OSC_TRIANGLE,
-  OSC_SQUARE,
-  OSC_SAWTOOTH,
-  OSC_COUNT  // Total number of oscillator types
-};
-
 // ========== Audio Configuration ==========
 #define I2S_PORT        I2S_NUM_0
 #define SAMPLE_RATE     44100          // 44.1 kHz
 #define TONE_FREQUENCY  880.0f        // A5, 880 Hz (higher frequency reduces speaker load)
-#define TABLE_SIZE      256           // Sine table size
-#define MAX_AMPLITUDE   14000         // Maximum amplitude for 16-bit audio (reduced to prevent clipping)
 
 // I2S channel handle for new driver
 i2s_chan_handle_t tx_handle = NULL;
@@ -86,42 +80,13 @@ TaskHandle_t audioTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
 SemaphoreHandle_t volumeMutex = NULL;
 
-// ========== Waveform Tables ==========
-int16_t sineTable[TABLE_SIZE];
-int16_t triangleTable[TABLE_SIZE];
-int16_t squareTable[TABLE_SIZE];
-int16_t sawtoothTable[TABLE_SIZE];
+// ========== Oscillator ==========
+Oscillator oscillator;
 
 // ========== Shared Variables ==========
 float currentAmplitude = 1.0f;        // Current amplitude multiplier (0.0 to 1.0)
 int volumePercent = 100;              // Current volume percentage
-volatile OscillatorType currentOscillator = OSC_SINE;  // Current oscillator type
 
-// ========== Build Waveform Lookup Tables ==========
-void buildWaveformTables() {
-  for (int i = 0; i < TABLE_SIZE; i++) {
-    float phase = (2.0f * PI * i) / TABLE_SIZE;
-    
-    // Sine wave
-    sineTable[i] = (int16_t)(sinf(phase) * MAX_AMPLITUDE);
-    
-    // Triangle wave
-    float triangleValue;
-    if (i < TABLE_SIZE / 2) {
-      triangleValue = (4.0f * i / TABLE_SIZE) - 1.0f;
-    } else {
-      triangleValue = 3.0f - (4.0f * i / TABLE_SIZE);
-    }
-    triangleTable[i] = (int16_t)(triangleValue * MAX_AMPLITUDE);
-    
-    // Square wave
-    squareTable[i] = (i < TABLE_SIZE / 2) ? MAX_AMPLITUDE : -MAX_AMPLITUDE;
-    
-    // Sawtooth wave
-    float sawtoothValue = (2.0f * i / TABLE_SIZE) - 1.0f;
-    sawtoothTable[i] = (int16_t)(sawtoothValue * MAX_AMPLITUDE);
-  }
-}
 
 // ========== Read Volume from Potentiometer ==========
 void updateVolume() {
@@ -153,19 +118,8 @@ void IRAM_ATTR onBootButtonPress() {
   // Debounce: ignore if button pressed within 250ms
   if (interruptTime - lastInterruptTime > 250) {
     // Cycle to next oscillator type
-    currentOscillator = (OscillatorType)((currentOscillator + 1) % OSC_COUNT);
+    oscillator.nextType();
     lastInterruptTime = interruptTime;
-  }
-}
-
-// ========== Get Oscillator Name ==========
-const char* getOscillatorName(OscillatorType osc) {
-  switch (osc) {
-    case OSC_SINE:     return "SINE";
-    case OSC_TRIANGLE: return "TRI";
-    case OSC_SQUARE:   return "SQR";
-    case OSC_SAWTOOTH: return "SAW";
-    default:           return "???";
   }
 }
 
@@ -285,8 +239,9 @@ void setup() {
   // Initialize display first
   setupDisplay();
   
-  // Build waveform tables
-  buildWaveformTables();
+  // Build oscillator waveform tables
+  oscillator.buildTables();
+  Serial.println("Oscillator waveform tables built");
   
   // Initialize I2S audio
   setupI2S();
@@ -342,7 +297,8 @@ void audioTask(void *parameter) {
   const int frames = 512;  // Increased buffer size for smoother audio
   int16_t buffer[frames * 2];  // 2 samples per frame (L,R)
   static float phaseIndex = 0.0f;
-  const float phaseIncrement = (TABLE_SIZE * TONE_FREQUENCY) / (float)SAMPLE_RATE;
+  const int tableSize = Oscillator::getTableSize();
+  const float phaseIncrement = (tableSize * TONE_FREQUENCY) / (float)SAMPLE_RATE;
   
   while (true) {
     // Update volume from potentiometer
@@ -374,34 +330,21 @@ void audioTask(void *parameter) {
     
     // Generate audio buffer
     float localAmplitude;
-    OscillatorType localOscillator;
     if (xSemaphoreTake(volumeMutex, pdMS_TO_TICKS(1)) == pdTRUE) {
       localAmplitude = currentAmplitude;
-      localOscillator = currentOscillator;
       xSemaphoreGive(volumeMutex);
     } else {
       localAmplitude = 1.0f;  // Fallback
-      localOscillator = OSC_SINE;
-    }
-    
-    // Select the appropriate waveform table
-    int16_t* waveTable;
-    switch (localOscillator) {
-      case OSC_SINE:     waveTable = sineTable; break;
-      case OSC_TRIANGLE: waveTable = triangleTable; break;
-      case OSC_SQUARE:   waveTable = squareTable; break;
-      case OSC_SAWTOOTH: waveTable = sawtoothTable; break;
-      default:           waveTable = sineTable; break;
     }
     
     for (int i = 0; i < frames; i++) {
       // Wrap phase index into table range
-      if (phaseIndex >= TABLE_SIZE) {
-        phaseIndex -= TABLE_SIZE;
+      if (phaseIndex >= tableSize) {
+        phaseIndex -= tableSize;
       }
       
       int idx = (int)phaseIndex;
-      int16_t sample = (int16_t)(waveTable[idx] * localAmplitude);
+      int16_t sample = (int16_t)(oscillator.getSample(idx) * localAmplitude);
       
       // Stereo: copy same sample to L and R
       buffer[i * 2 + 0] = sample;  // Left
@@ -443,18 +386,15 @@ void updateDisplay() {
   // Read shared variables with mutex protection
   float localAmplitude;
   int localVolumePercent;
-  OscillatorType localOscillator;
   
   if (xSemaphoreTake(volumeMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
     localAmplitude = currentAmplitude;
     localVolumePercent = volumePercent;
-    localOscillator = currentOscillator;
     xSemaphoreGive(volumeMutex);
   } else {
     // Fallback if mutex unavailable
     localAmplitude = 1.0f;
     localVolumePercent = 100;
-    localOscillator = OSC_SINE;
   }
   
   display.clearDisplay();
@@ -468,7 +408,7 @@ void updateDisplay() {
   
   // Draw oscillator type in the middle top
   display.setCursor(52, 0);
-  display.print(getOscillatorName(localOscillator));
+  display.print(oscillator.getTypeName());
   
   // Draw volume percentage at top right
   display.setCursor(SCREEN_WIDTH - 36, 0);
@@ -499,60 +439,14 @@ void updateDisplay() {
   for (int x = 0; x < SCREEN_WIDTH; x++) {
     // Calculate waveform value based on oscillator type
     float angle = (TWO_PI * 2 * x / SCREEN_WIDTH) + animPhase;
-    float waveValue = 0.0f;
-    
-    switch (localOscillator) {
-      case OSC_SINE:
-        waveValue = sin(angle);
-        break;
-      case OSC_TRIANGLE: {
-        float normalizedPhase = fmod(angle, TWO_PI) / TWO_PI;
-        if (normalizedPhase < 0.5f) {
-          waveValue = (4.0f * normalizedPhase) - 1.0f;
-        } else {
-          waveValue = 3.0f - (4.0f * normalizedPhase);
-        }
-        break;
-      }
-      case OSC_SQUARE:
-        waveValue = (fmod(angle, TWO_PI) < PI) ? 1.0f : -1.0f;
-        break;
-      case OSC_SAWTOOTH: {
-        float normalizedPhase = fmod(angle, TWO_PI) / TWO_PI;
-        waveValue = (2.0f * normalizedPhase) - 1.0f;
-        break;
-      }
-    }
+    float waveValue = oscillator.getDisplayValue(angle);
     
     int y = centerY - (int)(waveAmplitude * waveValue);
     
     // Draw the waveform
     if (x > 0) {
       float prevAngle = (TWO_PI * 2 * (x - 1) / SCREEN_WIDTH) + animPhase;
-      float prevWaveValue = 0.0f;
-      
-      switch (localOscillator) {
-        case OSC_SINE:
-          prevWaveValue = sin(prevAngle);
-          break;
-        case OSC_TRIANGLE: {
-          float normalizedPhase = fmod(prevAngle, TWO_PI) / TWO_PI;
-          if (normalizedPhase < 0.5f) {
-            prevWaveValue = (4.0f * normalizedPhase) - 1.0f;
-          } else {
-            prevWaveValue = 3.0f - (4.0f * normalizedPhase);
-          }
-          break;
-        }
-        case OSC_SQUARE:
-          prevWaveValue = (fmod(prevAngle, TWO_PI) < PI) ? 1.0f : -1.0f;
-          break;
-        case OSC_SAWTOOTH: {
-          float normalizedPhase = fmod(prevAngle, TWO_PI) / TWO_PI;
-          prevWaveValue = (2.0f * normalizedPhase) - 1.0f;
-          break;
-        }
-      }
+      float prevWaveValue = oscillator.getDisplayValue(prevAngle);
       
       int prevY = centerY - (int)(waveAmplitude * prevWaveValue);
       display.drawLine(x - 1, prevY, x, y, SSD1306_WHITE);
