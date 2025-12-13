@@ -5,7 +5,7 @@
  * - ESP32-WROOM-32
  * - MAX98357A I2S Audio Amplifier
  * - I2C OLED Display (SSD1306)
- * - Potentiometer (10kΩ) for volume control
+ * - Potentiometers (10kΩ) for control inputs
  * 
  * Connections:
  * 
@@ -22,9 +22,14 @@
  *   SCL -> GPIO 19
  *   SDA -> GPIO 21
  * 
- * Potentiometer:
+ * DIAL1 (Volume Control):
  *   One side  -> 3.3V
  *   Wiper     -> GPIO 4 (D4)
+ *   Other side -> GND
+ * 
+ * DIAL2:
+ *   One side  -> 3.3V
+ *   Wiper     -> GPIO 33
  *   Other side -> GND
  * 
  * BOOT Button:
@@ -67,7 +72,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define I2S_DOUT    22   // MAX98357A DIN
 
 // ========== Potentiometer Configuration ==========
-#define POT_PIN     4    // Potentiometer for volume control (GPIO 4 / D4)
+#define DIAL1       4    // First potentiometer for volume control (GPIO 4 / D4)
+#define DIAL2       33   // Second potentiometer (GPIO 33)
 
 // ========== Button Configuration ==========
 #define BOOT_BUTTON 0    // BOOT button (GPIO 0)
@@ -117,7 +123,7 @@ const int16_t MAX_AMPLITUDE_SINGLE = 14000;
 // ========== Read Volume from Potentiometer ==========
 void updateVolume() {
   // Read ADC value (0-4095 on ESP32)
-  int adcValue = analogRead(POT_PIN);
+  int adcValue = analogRead(DIAL1);
   
   // Apply smoothing to reduce jitter
   static int smoothedADC = 2048;
@@ -269,10 +275,12 @@ void setup() {
   Serial.println("========================================");
   Serial.println();
 
-  // Initialize potentiometer pin
-  pinMode(POT_PIN, INPUT);
+  // Initialize potentiometer pins
+  pinMode(DIAL1, INPUT);
+  pinMode(DIAL2, INPUT);
   // Note: Not using analogSetAttenuation() to avoid conflict with I2S driver
-  Serial.println("Potentiometer initialized on GPIO 4");
+  Serial.println("DIAL1 (volume) initialized on GPIO 4");
+  Serial.println("DIAL2 initialized on GPIO 33");
 
   // Initialize BOOT button with interrupt
   pinMode(BOOT_BUTTON, INPUT_PULLUP);
@@ -358,7 +366,7 @@ void audioTask(void *parameter) {
   
   while (true) {
     // Update volume from potentiometer
-    int adcValue = analogRead(POT_PIN);
+    int adcValue = analogRead(DIAL1);
     static int smoothedADC = 2048;
     smoothedADC = (smoothedADC * 7 + adcValue) / 8;
     
