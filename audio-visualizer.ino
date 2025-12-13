@@ -146,16 +146,18 @@ void IRAM_ATTR onBootButtonPress() {
     // Cycle through 3 modes: NOTE -> CHORD -> PROGRESSION -> NOTE...
     if (currentMode == MODE_SINGLE_NOTE) {
       currentMode = MODE_CHORD;
+      chordPlayer.setWaveform(WAVE_SINE);  // Use sine for static chord
       chordPlayer.reset();
       chordPlayer.setChord(&ChordLib::CM7);  // Set to Cm7
-      Serial.println("Mode: CHORD (Cm7)");
+      Serial.println("Mode: CHORD (Cm7) [Sine]");
     } else if (currentMode == MODE_CHORD) {
       currentMode = MODE_PROGRESSION;
       currentChordIndex = 0;  // Start with first chord
+      chordPlayer.setWaveform(WAVE_SAWTOOTH);  // Use sawtooth for progression
       chordPlayer.setChordFromProgression(0, currentProgression, currentProgressionLength);
       chordPlayer.reset();
       lastChordChangeTime = millis();  // Initialize timing
-      Serial.println("Mode: PROGRESSION (Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7)");
+      Serial.println("Mode: PROGRESSION (Ebmaj7 -> Cm7 -> Abmaj7 -> Abmaj7) [Sawtooth]");
     } else {
       currentMode = MODE_SINGLE_NOTE;
       Serial.println("Mode: NOTE (880Hz)");

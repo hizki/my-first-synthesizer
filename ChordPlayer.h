@@ -12,14 +12,28 @@
 #include <Arduino.h>
 #include "ChordLibrary.h"
 
+// ========== Waveform Types ==========
+enum WaveformType {
+  WAVE_SINE,
+  WAVE_TRIANGLE,
+  WAVE_SQUARE,
+  WAVE_SAWTOOTH
+};
+
 // ========== ChordPlayer Class ==========
 class ChordPlayer {
 private:
   static const int TABLE_SIZE = 256;
   static const int16_t MAX_AMPLITUDE_PER_NOTE = 4666;  // 14000 / 3 notes to prevent clipping
   
-  // Sine wave lookup table (shared by all notes)
+  // Waveform lookup tables (shared by all notes)
   int16_t sineTable[TABLE_SIZE];
+  int16_t sawtoothTable[TABLE_SIZE];
+  int16_t triangleTable[TABLE_SIZE];
+  int16_t squareTable[TABLE_SIZE];
+  
+  // Current waveform type
+  WaveformType currentWaveform;
   
   // Current chord being played
   const Chord* currentChord;
@@ -50,19 +64,38 @@ private:
   
 public:
   /**
-   * Constructor - initializes with default chord (Cm7)
+   * Constructor - initializes with default chord (Cm7) and sine wave
    */
   ChordPlayer() : phase1(0.0f), phase2(0.0f), phase3(0.0f), 
-                  currentChord(&ChordLib::CM7), storedSampleRate(44100.0f) {}
+                  currentChord(&ChordLib::CM7), storedSampleRate(44100.0f),
+                  currentWaveform(WAVE_SINE) {}
   
   /**
-   * Build sine wave lookup table
+   * Build all waveform lookup tables
    * Call this once during setup
    */
   void buildTable() {
     for (int i = 0; i < TABLE_SIZE; i++) {
       float phase = (2.0f * PI * i) / TABLE_SIZE;
+      
+      // Sine wave
       sineTable[i] = (int16_t)(sinf(phase) * MAX_AMPLITUDE_PER_NOTE);
+      
+      // Triangle wave
+      float triangleValue;
+      if (i < TABLE_SIZE / 2) {
+        triangleValue = (4.0f * i / TABLE_SIZE) - 1.0f;
+      } else {
+        triangleValue = 3.0f - (4.0f * i / TABLE_SIZE);
+      }
+      triangleTable[i] = (int16_t)(triangleValue * MAX_AMPLITUDE_PER_NOTE);
+      
+      // Square wave
+      squareTable[i] = (i < TABLE_SIZE / 2) ? MAX_AMPLITUDE_PER_NOTE : -MAX_AMPLITUDE_PER_NOTE;
+      
+      // Sawtooth wave
+      float sawtoothValue = (2.0f * i / TABLE_SIZE) - 1.0f;
+      sawtoothTable[i] = (int16_t)(sawtoothValue * MAX_AMPLITUDE_PER_NOTE);
     }
   }
   
@@ -87,6 +120,21 @@ public:
   }
   
   /**
+   * Set waveform type
+   * @param waveform Waveform type to use
+   */
+  void setWaveform(WaveformType waveform) {
+    currentWaveform = waveform;
+  }
+  
+  /**
+   * Get current waveform type
+   */
+  WaveformType getWaveform() const {
+    return currentWaveform;
+  }
+  
+  /**
    * Set chord by index from progression
    * @param chordIndex Index in the current progression (0-based)
    * @param progression Array of chord pointers
@@ -107,10 +155,20 @@ public:
     if (phase2 >= TABLE_SIZE) phase2 -= TABLE_SIZE;
     if (phase3 >= TABLE_SIZE) phase3 -= TABLE_SIZE;
     
-    // Get samples from each note
-    int16_t sample1 = sineTable[(int)phase1];
-    int16_t sample2 = sineTable[(int)phase2];
-    int16_t sample3 = sineTable[(int)phase3];
+    // Select the appropriate waveform table
+    int16_t* waveTable;
+    switch (currentWaveform) {
+      case WAVE_SINE:     waveTable = sineTable; break;
+      case WAVE_TRIANGLE: waveTable = triangleTable; break;
+      case WAVE_SQUARE:   waveTable = squareTable; break;
+      case WAVE_SAWTOOTH: waveTable = sawtoothTable; break;
+      default:            waveTable = sineTable; break;
+    }
+    
+    // Get samples from each note using selected waveform
+    int16_t sample1 = waveTable[(int)phase1];
+    int16_t sample2 = waveTable[(int)phase2];
+    int16_t sample3 = waveTable[(int)phase3];
     
     // Advance phase accumulators
     phase1 += phaseIncrement1;
