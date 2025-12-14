@@ -13,50 +13,86 @@
 #include <Arduino.h>
 #include "ChordLibrary.h"
 #include "Oscillator.h"
+#include "UnisonConfig.h"
 
 // ========== ChordPlayer Class ==========
 class ChordPlayer {
 private:
   static const int TABLE_SIZE = 256;
-  static const int16_t MAX_AMPLITUDE_PER_NOTE = 4666;  // 14000 / 3 notes to prevent clipping
+  static const int MAX_VOICES = 12;  // 3 chord notes × 4 max unison voices
   
   // Reference to shared Oscillator (no duplicate tables)
   const Oscillator* sharedOscillator;
   
+  // Reference to UnisonConfig for detune management
+  const UnisonConfig* unisonConfig;
+  
   // Current chord being played
   const Chord* currentChord;
   
-  // Phase accumulators for each note (3 notes per chord)
-  float phase1;
-  float phase2;
-  float phase3;
+  // Phase accumulators for all voices (3 notes × 4 unison = 12 max)
+  float phases[MAX_VOICES];
   
-  // Phase increments for current chord (3 notes)
-  float phaseIncrement1;
-  float phaseIncrement2;
-  float phaseIncrement3;
+  // Phase increments for all voices
+  float phaseIncrements[MAX_VOICES];
   
   // Sample rate stored for chord switching
   float storedSampleRate;
   
   /**
-   * Calculate phase increments from chord frequencies
+   * Calculate phase increments from chord frequencies with unison detuning
    */
   void calculatePhaseIncrements() {
-    if (currentChord != nullptr) {
-      phaseIncrement1 = (TABLE_SIZE * currentChord->note1) / storedSampleRate;
-      phaseIncrement2 = (TABLE_SIZE * currentChord->note2) / storedSampleRate;
-      phaseIncrement3 = (TABLE_SIZE * currentChord->note3) / storedSampleRate;
+    if (currentChord == nullptr || unisonConfig == nullptr) {
+      return;
     }
+    
+    int unisonCount = unisonConfig->getUnisonCount();
+    const float* detuneRatios = unisonConfig->getDetuneRatios();
+    
+    // Calculate base phase increments for the three chord notes
+    float baseFreqs[3] = {
+      currentChord->note1,
+      currentChord->note2,
+      currentChord->note3
+    };
+    
+    // Generate phase increments for all voices (3 notes × unison count)
+    int voiceIndex = 0;
+    for (int note = 0; note < 3; note++) {
+      for (int unison = 0; unison < unisonCount; unison++) {
+        float detunedFreq = baseFreqs[note] * detuneRatios[unison];
+        phaseIncrements[voiceIndex] = (TABLE_SIZE * detunedFreq) / storedSampleRate;
+        voiceIndex++;
+      }
+    }
+  }
+  
+  /**
+   * Get maximum amplitude per voice to prevent clipping
+   * Scales based on total number of active voices
+   */
+  int16_t getMaxAmplitudePerVoice() const {
+    if (unisonConfig == nullptr) {
+      return 4666;  // Default: 14000 / 3
+    }
+    
+    int totalVoices = 3 * unisonConfig->getUnisonCount();
+    return 14000 / totalVoices;
   }
   
 public:
   /**
    * Constructor - initializes with default chord (Cm7)
    */
-  ChordPlayer() : phase1(0.0f), phase2(0.0f), phase3(0.0f), 
-                  currentChord(&ChordLib::CM7), storedSampleRate(44100.0f),
-                  sharedOscillator(nullptr) {}
+  ChordPlayer() : currentChord(&ChordLib::CM7), storedSampleRate(44100.0f),
+                  sharedOscillator(nullptr), unisonConfig(nullptr) {
+    // Initialize all phases to zero
+    for (int i = 0; i < MAX_VOICES; i++) {
+      phases[i] = 0.0f;
+      phaseIncrements[i] = 0.0f;
+    }
+  }
   
   /**
    * Set the shared oscillator reference
@@ -65,6 +101,16 @@ public:
    */
   void setOscillator(const Oscillator* osc) {
     sharedOscillator = osc;
+  }
+  
+  /**
+   * Set the unison configuration reference
+   * Must be called to enable unison support
+   * @param config Pointer to the UnisonConfig instance
+   */
+  void setUnisonConfig(const UnisonConfig* config) {
+    unisonConfig = config;
+    calculatePhaseIncrements();  // Recalculate with new unison settings
   }
   
   /**
@@ -87,6 +133,13 @@ public:
     }
   }
   
+  /**
+   * Recalculate phase increments (public for unison changes)
+   * Useful when unison configuration changes
+   */
+  void recalculatePhaseIncrements() {
+    calculatePhaseIncrements();
+  }
   
   /**
    * Set chord by index from progression
@@ -100,32 +153,39 @@ public:
   }
   
   /**
-   * Generate a single mixed sample from all three notes
+   * Generate a single mixed sample from all voices
    * Uses shared Oscillator for waveform generation
-   * @return 16-bit audio sample (sum of all notes)
+   * Supports unison: mixes 3 chord notes × unison count voices
+   * @return 16-bit audio sample (sum of all voices)
    */
   int16_t getNextSample() {
-    if (sharedOscillator == nullptr) {
+    if (sharedOscillator == nullptr || unisonConfig == nullptr) {
       return 0;  // Safety check
     }
     
-    // Wrap phase accumulators
-    if (phase1 >= TABLE_SIZE) phase1 -= TABLE_SIZE;
-    if (phase2 >= TABLE_SIZE) phase2 -= TABLE_SIZE;
-    if (phase3 >= TABLE_SIZE) phase3 -= TABLE_SIZE;
+    int unisonCount = unisonConfig->getUnisonCount();
+    int totalVoices = 3 * unisonCount;
+    int16_t maxAmp = getMaxAmplitudePerVoice();
     
-    // Get scaled samples from shared oscillator (uses current oscillator waveform)
-    int16_t sample1 = sharedOscillator->getSampleScaled((int)phase1, MAX_AMPLITUDE_PER_NOTE);
-    int16_t sample2 = sharedOscillator->getSampleScaled((int)phase2, MAX_AMPLITUDE_PER_NOTE);
-    int16_t sample3 = sharedOscillator->getSampleScaled((int)phase3, MAX_AMPLITUDE_PER_NOTE);
+    int32_t mixedSample = 0;  // Use 32-bit to prevent overflow during mixing
     
-    // Advance phase accumulators
-    phase1 += phaseIncrement1;
-    phase2 += phaseIncrement2;
-    phase3 += phaseIncrement3;
+    // Mix all active voices
+    for (int i = 0; i < totalVoices; i++) {
+      // Wrap phase accumulator
+      if (phases[i] >= TABLE_SIZE) {
+        phases[i] -= TABLE_SIZE;
+      }
+      
+      // Get scaled sample from shared oscillator
+      int16_t sample = sharedOscillator->getSampleScaled((int)phases[i], maxAmp);
+      mixedSample += sample;
+      
+      // Advance phase accumulator
+      phases[i] += phaseIncrements[i];
+    }
     
-    // Mix (sum) all three notes
-    return sample1 + sample2 + sample3;
+    // Return mixed sample (clamped to 16-bit range)
+    return (int16_t)mixedSample;
   }
   
   /**
@@ -133,9 +193,9 @@ public:
    * Useful when switching chords for clean transitions
    */
   void reset() {
-    phase1 = 0.0f;
-    phase2 = 0.0f;
-    phase3 = 0.0f;
+    for (int i = 0; i < MAX_VOICES; i++) {
+      phases[i] = 0.0f;
+    }
   }
   
   /**

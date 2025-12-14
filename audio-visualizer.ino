@@ -52,6 +52,7 @@
 #include "ChordLibrary.h"
 #include "ChordPlayer.h"
 #include "Gauge.h"
+#include "UnisonConfig.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -100,6 +101,7 @@ SemaphoreHandle_t volumeMutex = NULL;
 // ========== Audio Generators ==========
 Oscillator oscillator;  // Single global oscillator - shared by all modes
 ChordPlayer chordPlayer;
+UnisonConfig unisonConfig;  // Unison configuration for chord modes
 
 // ========== Shared Variables ==========
 float currentAmplitude = 1.0f;        // Current amplitude multiplier (0.0 to 1.0)
@@ -122,6 +124,14 @@ float targetWaveformAngle = 180.0f;
 unsigned long knobAnimationStartTime = 0;
 const unsigned long KNOB_ANIMATION_DURATION_MS = 450;  // Animation duration
 
+// ========== Unison Animation ==========
+unsigned long unisonAnimationEndTime = 0;
+bool showingUnisonAnimation = false;
+float previousUnisonAngle = 180.0f;  // Start at x1 position (arc system)
+float targetUnisonAngle = 180.0f;
+unsigned long unisonAnimationStartTime = 0;
+const unsigned long UNISON_ANIMATION_DURATION_MS = 450;  // Animation duration
+
 // ========== Chord Progression Timing ==========
 unsigned long lastChordChangeTime = 0;
 const unsigned long CHORD_DURATION_MS = 1600;  // 1.6 seconds (half note at 75 BPM)
@@ -137,6 +147,10 @@ const char* WAVEFORM_LABELS[] = {"SAW", "SQR", "TRI", "SIN"};
 const float WAVEFORM_ANGLES[] = {180.0f, 120.0f, 60.0f, 0.0f};
 const int NUM_WAVEFORMS = 4;
 
+const char* UNISON_LABELS[] = {"x1", "x2", "x3", "x4"};
+const float UNISON_ANGLES[] = {180.0f, 120.0f, 60.0f, 0.0f};
+const int NUM_UNISON = 4;
+
 // ========== Angle Helper Functions ==========
 // Arc gauge: 180° (left) to 0° (right), spanning top half like a speedometer
 float getWaveformAngle(OscillatorType type) {
@@ -146,6 +160,16 @@ float getWaveformAngle(OscillatorType type) {
     case OSC_TRIANGLE: return 60.0f;   // 2/3 position (66%)
     case OSC_SINE:     return 0.0f;    // Right position (100%)
     default:           return 180.0f;
+  }
+}
+
+float getUnisonAngle(int unisonCount) {
+  switch (unisonCount) {
+    case 1: return 180.0f;  // Left position (x1)
+    case 2: return 120.0f;  // 1/3 position (x2)
+    case 3: return 60.0f;   // 2/3 position (x3)
+    case 4: return 0.0f;    // Right position (x4)
+    default: return 180.0f;
   }
 }
 
@@ -379,10 +403,12 @@ void setup() {
   oscillator.setType(OSC_SAWTOOTH);  // Default waveform
   Serial.println("Oscillator waveform tables built");
   
-  // Initialize chord player with shared oscillator
+  // Initialize chord player with shared oscillator and unison config
   chordPlayer.setOscillator(&oscillator);
+  chordPlayer.setUnisonConfig(&unisonConfig);
   chordPlayer.init(SAMPLE_RATE);
   Serial.println("Chord player initialized (using shared oscillator)");
+  Serial.println("Unison config initialized (default: x1)");
   
   // Initialize I2S audio
   setupI2S();
@@ -452,7 +478,7 @@ void audioTask(void *parameter) {
   const float phaseIncrement = (tableSize * TONE_FREQUENCY) / (float)SAMPLE_RATE;
   
   while (true) {
-    // Update volume from potentiometer
+    // Update volume from potentiometer (DIAL1)
     int adcValue = analogRead(DIAL1);
     static int smoothedADC = 2048;
     smoothedADC = (smoothedADC * 7 + adcValue) / 8;
@@ -477,6 +503,49 @@ void audioTask(void *parameter) {
       }
       
       xSemaphoreGive(volumeMutex);
+    }
+    
+    // Update unison from potentiometer (DIAL2) - only in chord modes
+    if (currentMode == MODE_CHORD || currentMode == MODE_PROGRESSION) {
+      int dial2Value = analogRead(DIAL2);
+      static int smoothedDial2 = 0;
+      smoothedDial2 = (smoothedDial2 * 7 + dial2Value) / 8;
+      
+      // Map ADC value (0-4095) to unison count (1-4) with hysteresis zones
+      // Divide into 4 zones with 20% hysteresis to prevent jitter
+      int newUnisonCount;
+      if (smoothedDial2 < 850) {
+        newUnisonCount = 1;
+      } else if (smoothedDial2 < 1900) {
+        newUnisonCount = 2;
+      } else if (smoothedDial2 < 2950) {
+        newUnisonCount = 3;
+      } else {
+        newUnisonCount = 4;
+      }
+      
+      // Detect changes and update
+      int currentUnisonCount = unisonConfig.getUnisonCount();
+      if (newUnisonCount != currentUnisonCount) {
+        // Store previous angle
+        previousUnisonAngle = getUnisonAngle(currentUnisonCount);
+        
+        // Update unison count
+        unisonConfig.setUnisonCount(newUnisonCount);
+        chordPlayer.recalculatePhaseIncrements();  // Recalculate with new detune
+        
+        // Store target angle
+        targetUnisonAngle = getUnisonAngle(newUnisonCount);
+        
+        // Trigger unison animation
+        showingUnisonAnimation = true;
+        unisonAnimationStartTime = millis();
+        unisonAnimationEndTime = millis() + 950;  // 450ms animation + 500ms hold
+        
+        // Log change
+        Serial.print("Unison: x");
+        Serial.println(newUnisonCount);
+      }
     }
     
     // Handle chord progression timing (only in PROGRESSION mode)
@@ -606,8 +675,67 @@ void drawKnobAnimation() {
   display.display();
 }
 
+// ========== Draw Unison Animation ==========
+void drawUnisonAnimation() {
+  display.clearDisplay();
+  
+  // Calculate current angle based on animation progress
+  unsigned long elapsed = millis() - unisonAnimationStartTime;
+  float currentAngle;
+  
+  if (elapsed < UNISON_ANIMATION_DURATION_MS) {
+    // Animating - interpolate between previous and target angles
+    float progress = (float)elapsed / (float)UNISON_ANIMATION_DURATION_MS;
+    float angleDelta = getShortestAnglePath(previousUnisonAngle, targetUnisonAngle);
+    currentAngle = previousUnisonAngle + (angleDelta * progress);
+  } else {
+    // Animation complete - use target angle (static hold period)
+    currentAngle = targetUnisonAngle;
+  }
+  
+  // Reinitialize gauge with unison labels and angles (temporarily)
+  gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
+             UNISON_LABELS, NUM_UNISON, UNISON_ANGLES);
+  
+  // Update and draw the gauge
+  gauge.setAngle(currentAngle);
+  gauge.draw();
+  
+  // Get unison label for display
+  int currentUnisonCount = unisonConfig.getUnisonCount();
+  const char* unisonLabel = UNISON_LABELS[currentUnisonCount - 1];  // x1, x2, x3, x4
+  
+  // Draw unison label at bottom center
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  int textWidth = strlen(unisonLabel) * 12;  // Approximate width
+  display.setCursor((SCREEN_WIDTH - textWidth) / 2, SCREEN_HEIGHT - 16);
+  display.print(unisonLabel);
+  
+  display.display();
+  
+  // Restore gauge to waveform configuration after animation
+  if (elapsed >= UNISON_ANIMATION_DURATION_MS + 500) {
+    gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
+               WAVEFORM_LABELS, NUM_WAVEFORMS, WAVEFORM_ANGLES);
+  }
+}
+
 // ========== Update Display with Waveform ==========
 void updateDisplay() {
+  // Check if showing unison animation (priority over waveform animation)
+  if (showingUnisonAnimation) {
+    if (millis() < unisonAnimationEndTime) {
+      drawUnisonAnimation();
+      return;
+    } else {
+      showingUnisonAnimation = false;
+      // Restore gauge to waveform configuration
+      gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
+                 WAVEFORM_LABELS, NUM_WAVEFORMS, WAVEFORM_ANGLES);
+    }
+  }
+  
   // Check if showing knob animation
   if (showingKnobAnimation) {
     if (millis() < knobAnimationEndTime) {
