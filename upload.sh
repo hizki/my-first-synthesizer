@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ESP32 Audio Visualizer - Quick Upload Script
+# ESP32 Chord Synth - Quick Upload Script
 # Compiles and uploads the sketch to ESP32
 
 # Colors for output
@@ -9,8 +9,8 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}ESP32 Audio Visualizer - Upload Script${NC}"
-echo "========================================"
+echo -e "${GREEN}ESP32 Chord Synth - Upload Script${NC}"
+echo "===================================="
 echo ""
 
 # Find the Arduino CLI or IDE
@@ -55,15 +55,20 @@ if [ "$ARDUINO_CMD" = "arduino-cli" ]; then
 else
     echo "Compiling and uploading with Arduino IDE..."
     echo ""
-    $ARDUINO_CMD --board $FQBN --port $PORT --upload audio-visualizer.ino
+    $ARDUINO_CMD --board $FQBN --port $PORT --upload chord-synth.ino
 fi
 
 if [ $? -eq 0 ]; then
     echo ""
     echo -e "${GREEN}✓ Upload successful!${NC}"
     echo ""
-    echo "The ESP32 should now be playing a 440Hz tone"
+    echo "The ESP32 Chord Synth should now be playing a jazz progression"
     echo "and displaying the waveform on the OLED screen."
+    echo ""
+    echo "Controls:"
+    echo "  DIAL1 (GPIO 4): Volume control"
+    echo "  DIAL2 (GPIO 33): Unison voices (x1/x2/x3/x4)"
+    echo "  BOOT button: Short press = waveform, Long press = mode"
     echo ""
     echo "To monitor serial output:"
     echo "  screen $PORT 115200"

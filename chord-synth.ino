@@ -1,5 +1,8 @@
 /*
- * ESP32 Audio Visualizer with I2S Output and Volume Control
+ * ESP32 Chord Synth - Polyphonic Synthesizer with I2S Output
+ * 
+ * A polyphonic synthesizer with chord progression playback, unison detuning,
+ * and real-time waveform visualization on OLED display.
  * 
  * Hardware:
  * - ESP32-WROOM-32
@@ -34,7 +37,8 @@
  * 
  * BOOT Button:
  *   GPIO 0 (built-in on ESP32-WROOM-32)
- *   Press to toggle between NOTE mode (single tone) and CHORD mode (Cm7 chord)
+ *   Short press: Cycle waveform (SAW → SQR → TRI → SIN)
+ *   Long press: Cycle mode (PROGRESSION → CHORD → NOTE)
  * 
  * Libraries Required:
  * - Adafruit GFX Library
@@ -269,10 +273,10 @@ void setupDisplay() {
   display.clearDisplay();
   display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(10, 10);
-  display.println("AUDIO");
-  display.setCursor(5, 35);
-  display.println("VISUALIZER");
+  display.setCursor(15, 10);
+  display.println("CHORD");
+  display.setCursor(15, 35);
+  display.println("SYNTH");
   display.display();
   delay(1500);
   
@@ -295,7 +299,7 @@ void setup() {
   delay(1000);
   
   Serial.println("\n\n========================================");
-  Serial.println("ESP32 Audio Visualizer");
+  Serial.println("ESP32 Chord Synth");
   Serial.println("========================================");
   Serial.println();
 

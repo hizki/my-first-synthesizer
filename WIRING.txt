@@ -1,5 +1,5 @@
-ESP32 Audio Visualizer - Wiring Guide
-=====================================
+ESP32 Chord Synth - Wiring Guide
+=================================
 
 GPIO PIN SUMMARY:
 -----------------
