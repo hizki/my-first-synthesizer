@@ -56,6 +56,7 @@
 #include "Gauge.h"
 #include "UnisonConfig.h"
 #include "I2SDriver.h"
+#include "BootAnimation.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -269,28 +270,8 @@ void setupDisplay() {
 
   Serial.println("OLED display initialized successfully!");
   
-  // Show boot splash
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(15, 10);
-  display.println("CHORD");
-  display.setCursor(15, 35);
-  display.println("SYNTH");
-  display.display();
-  delay(1500);
-  
-  // Show frequency info
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(20, 20);
-  display.println("Playing:");
-  display.setTextSize(2);
-  display.setCursor(25, 35);
-  display.print(TONE_FREQUENCY, 0);
-  display.println(" Hz");
-  display.display();
-  delay(1500);
+  // Show dazzling boot animation
+  BootAnimation::play(&display, SCREEN_WIDTH, SCREEN_HEIGHT);
 }
 
 // ========== Setup ==========
