@@ -40,7 +40,13 @@ public:
     _labels(nullptr),
     _angles(nullptr),
     _customAngles(nullptr),
-    _currentAngle(0.0f) {
+    _currentAngle(0.0f),
+    _isAnimating(false),
+    _animationStartTime(0),
+    _animationDuration(0),
+    _animationHoldDuration(0),
+    _previousAngle(0.0f),
+    _targetAngle(0.0f) {
   }
 
   /**
@@ -105,6 +111,65 @@ public:
   }
 
   /**
+   * Start an animated transition to a target angle
+   * 
+   * @param targetAngle Target angle in degrees
+   * @param animationDurationMs Animation duration in milliseconds (default: 450ms)
+   * @param holdDurationMs Additional hold time after animation (default: 500ms)
+   */
+  void startAnimation(float targetAngle, unsigned long animationDurationMs = 450, 
+                      unsigned long holdDurationMs = 500) {
+    _previousAngle = _currentAngle;
+    _targetAngle = targetAngle;
+    _animationStartTime = millis();
+    _animationDuration = animationDurationMs;
+    _animationHoldDuration = holdDurationMs;
+    _isAnimating = true;
+  }
+
+  /**
+   * Check if animation is currently active
+   * 
+   * @return true if animating, false otherwise
+   */
+  bool isAnimating() const {
+    if (!_isAnimating) return false;
+    
+    unsigned long elapsed = millis() - _animationStartTime;
+    return elapsed < (_animationDuration + _animationHoldDuration);
+  }
+
+  /**
+   * Update animation state (call this each frame)
+   * Returns true if animation is still active
+   */
+  bool updateAnimation() {
+    if (!_isAnimating) return false;
+    
+    unsigned long elapsed = millis() - _animationStartTime;
+    
+    // Check if animation is complete
+    if (elapsed >= (_animationDuration + _animationHoldDuration)) {
+      _isAnimating = false;
+      _currentAngle = _targetAngle;
+      return false;
+    }
+    
+    // Calculate current angle based on animation progress
+    if (elapsed < _animationDuration) {
+      // Animating - interpolate between previous and target angles
+      float progress = (float)elapsed / (float)_animationDuration;
+      float angleDelta = getShortestAnglePath(_previousAngle, _targetAngle);
+      _currentAngle = _previousAngle + (angleDelta * progress);
+    } else {
+      // Animation complete - use target angle (static hold period)
+      _currentAngle = _targetAngle;
+    }
+    
+    return true;
+  }
+
+  /**
    * Draw the complete gauge (arc, ticks, labels, needle)
    * Call this after setAngle() to render the gauge
    */
@@ -118,6 +183,37 @@ public:
     drawLabels();
     drawNeedle();
     drawPivot();
+  }
+
+  /**
+   * Draw the gauge with animation and bottom label
+   * 
+   * @param bottomLabel Text to display at bottom center (or nullptr for no label)
+   * @param labelSize Text size for bottom label (default: 2)
+   */
+  void drawWithLabel(const char* bottomLabel = nullptr, int labelSize = 2) {
+    if (_display == nullptr) return;
+    
+    _display->clearDisplay();
+    
+    // Update animation if active
+    updateAnimation();
+    
+    // Draw the gauge
+    draw();
+    
+    // Draw bottom label if provided
+    if (bottomLabel != nullptr) {
+      _display->setTextSize(labelSize);
+      _display->setTextColor(SSD1306_WHITE);
+      int textWidth = strlen(bottomLabel) * (6 * labelSize);  // Approximate width
+      int screenWidth = _display->width();
+      int screenHeight = _display->height();
+      _display->setCursor((screenWidth - textWidth) / 2, screenHeight - 16);
+      _display->print(bottomLabel);
+    }
+    
+    _display->display();
   }
 
 private:
@@ -136,6 +232,37 @@ private:
   
   // Current state
   float _currentAngle;
+  
+  // Animation state
+  bool _isAnimating;
+  unsigned long _animationStartTime;
+  unsigned long _animationDuration;
+  unsigned long _animationHoldDuration;
+  float _previousAngle;
+  float _targetAngle;
+
+  /**
+   * Calculate shortest angle path between two angles
+   * Handles wrapping for smooth animations
+   * 
+   * @param from Starting angle
+   * @param to Target angle
+   * @return Angle delta (can be negative for counterclockwise)
+   */
+  float getShortestAnglePath(float from, float to) {
+    // Special case: SINE (0°) back to SAWTOOTH (180°) - go all the way back counterclockwise
+    if (from == 0.0f && to == 180.0f) {
+      return -180.0f;  // Go counterclockwise through the full sweep
+    }
+    
+    float delta = to - from;
+    
+    // Normalize to [-180, 180] range to find shortest path
+    while (delta > 180.0f) delta -= 360.0f;
+    while (delta < -180.0f) delta += 360.0f;
+    
+    return delta;
+  }
 
   /**
    * Draw the elliptic arc with double lines

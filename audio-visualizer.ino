@@ -116,21 +116,13 @@ volatile bool buttonReleased = false;
 const unsigned long LONG_PRESS_THRESHOLD = 1000;  // 1 second
 const unsigned long DEBOUNCE_DELAY = 50;  // 50ms debounce
 
-// ========== Knob Animation ==========
-unsigned long knobAnimationEndTime = 0;
-bool showingKnobAnimation = false;
-float previousWaveformAngle = 180.0f;  // Start at SAWTOOTH position (arc system)
-float targetWaveformAngle = 180.0f;
-unsigned long knobAnimationStartTime = 0;
-const unsigned long KNOB_ANIMATION_DURATION_MS = 450;  // Animation duration
-
-// ========== Unison Animation ==========
-unsigned long unisonAnimationEndTime = 0;
-bool showingUnisonAnimation = false;
-float previousUnisonAngle = 180.0f;  // Start at x1 position (arc system)
-float targetUnisonAngle = 180.0f;
-unsigned long unisonAnimationStartTime = 0;
-const unsigned long UNISON_ANIMATION_DURATION_MS = 450;  // Animation duration
+// ========== Animation Modes ==========
+enum AnimationMode {
+  ANIM_NONE,
+  ANIM_WAVEFORM,
+  ANIM_UNISON
+};
+volatile AnimationMode currentAnimation = ANIM_NONE;
 
 // ========== Chord Progression Timing ==========
 unsigned long lastChordChangeTime = 0;
@@ -173,26 +165,9 @@ float getUnisonAngle(int unisonCount) {
   }
 }
 
-float getShortestAnglePath(float from, float to) {
-  // Special case: SINE (0°) back to SAWTOOTH (180°) - go all the way back counterclockwise
-  if (from == 0.0f && to == 180.0f) {
-    return -180.0f;  // Go counterclockwise through the full sweep
-  }
-  
-  float delta = to - from;
-  
-  // Normalize to [-180, 180] range to find shortest path
-  while (delta > 180.0f) delta -= 360.0f;
-  while (delta < -180.0f) delta += 360.0f;
-  
-  return delta;
-}
-
 // ========== Waveform Cycling ==========
 void cycleWaveform() {
-  // Store previous angle before changing waveform
-  previousWaveformAngle = getWaveformAngle(currentGlobalWaveform);
-  
+  // Cycle through waveforms
   switch (currentGlobalWaveform) {
     case OSC_SAWTOOTH: currentGlobalWaveform = OSC_SQUARE; break;
     case OSC_SQUARE:   currentGlobalWaveform = OSC_TRIANGLE; break;
@@ -200,16 +175,13 @@ void cycleWaveform() {
     case OSC_SINE:     currentGlobalWaveform = OSC_SAWTOOTH; break;
   }
   
-  // Store target angle after changing waveform
-  targetWaveformAngle = getWaveformAngle(currentGlobalWaveform);
-  
   // Update global oscillator type
   oscillator.setType(currentGlobalWaveform);
   
-  // Show knob animation (450ms animation + 500ms hold = 950ms total)
-  showingKnobAnimation = true;
-  knobAnimationStartTime = millis();
-  knobAnimationEndTime = millis() + 950;
+  // Start gauge animation to new waveform angle
+  float targetAngle = getWaveformAngle(currentGlobalWaveform);
+  gauge.startAnimation(targetAngle);
+  currentAnimation = ANIM_WAVEFORM;
   
   // Log change
   Serial.print("Waveform: ");
@@ -527,20 +499,18 @@ void audioTask(void *parameter) {
       // Detect changes and update
       int currentUnisonCount = unisonConfig.getUnisonCount();
       if (newUnisonCount != currentUnisonCount) {
-        // Store previous angle
-        previousUnisonAngle = getUnisonAngle(currentUnisonCount);
-        
         // Update unison count
         unisonConfig.setUnisonCount(newUnisonCount);
         chordPlayer.recalculatePhaseIncrements();  // Recalculate with new detune
         
-        // Store target angle
-        targetUnisonAngle = getUnisonAngle(newUnisonCount);
+        // Reconfigure gauge for unison display
+        gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
+                   UNISON_LABELS, NUM_UNISON, UNISON_ANGLES);
         
-        // Trigger unison animation
-        showingUnisonAnimation = true;
-        unisonAnimationStartTime = millis();
-        unisonAnimationEndTime = millis() + 950;  // 450ms animation + 500ms hold
+        // Start gauge animation to new unison angle
+        float targetAngle = getUnisonAngle(newUnisonCount);
+        gauge.startAnimation(targetAngle);
+        currentAnimation = ANIM_UNISON;
         
         // Log change
         Serial.print("Unison: x");
@@ -634,116 +604,40 @@ void loop() {
   delay(10);
 }
 
-// ========== Draw Knob Animation ==========
-void drawKnobAnimation() {
-  display.clearDisplay();
-  
-  // Calculate current angle based on animation progress
-  unsigned long elapsed = millis() - knobAnimationStartTime;
-  float currentAngle;
-  
-  if (elapsed < KNOB_ANIMATION_DURATION_MS) {
-    // Animating - interpolate between previous and target angles
-    float progress = (float)elapsed / (float)KNOB_ANIMATION_DURATION_MS;
-    float angleDelta = getShortestAnglePath(previousWaveformAngle, targetWaveformAngle);
-    currentAngle = previousWaveformAngle + (angleDelta * progress);
-  } else {
-    // Animation complete - use target angle (static hold period)
-    currentAngle = targetWaveformAngle;
-  }
-  
-  // Update and draw the gauge
-  gauge.setAngle(currentAngle);
-  gauge.draw();
-  
-  // Get waveform name for display
-  const char* waveName = "";
-  switch (currentGlobalWaveform) {
-    case OSC_SAWTOOTH: waveName = "SAW"; break;
-    case OSC_SQUARE:   waveName = "SQR"; break;
-    case OSC_TRIANGLE: waveName = "TRI"; break;
-    case OSC_SINE:     waveName = "SIN"; break;
-  }
-  
-  // Draw waveform name at bottom center
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  int textWidth = strlen(waveName) * 12;  // Approximate width
-  display.setCursor((SCREEN_WIDTH - textWidth) / 2, SCREEN_HEIGHT - 16);
-  display.print(waveName);
-  
-  display.display();
-}
-
-// ========== Draw Unison Animation ==========
-void drawUnisonAnimation() {
-  display.clearDisplay();
-  
-  // Calculate current angle based on animation progress
-  unsigned long elapsed = millis() - unisonAnimationStartTime;
-  float currentAngle;
-  
-  if (elapsed < UNISON_ANIMATION_DURATION_MS) {
-    // Animating - interpolate between previous and target angles
-    float progress = (float)elapsed / (float)UNISON_ANIMATION_DURATION_MS;
-    float angleDelta = getShortestAnglePath(previousUnisonAngle, targetUnisonAngle);
-    currentAngle = previousUnisonAngle + (angleDelta * progress);
-  } else {
-    // Animation complete - use target angle (static hold period)
-    currentAngle = targetUnisonAngle;
-  }
-  
-  // Reinitialize gauge with unison labels and angles (temporarily)
-  gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
-             UNISON_LABELS, NUM_UNISON, UNISON_ANGLES);
-  
-  // Update and draw the gauge
-  gauge.setAngle(currentAngle);
-  gauge.draw();
-  
-  // Get unison label for display
-  int currentUnisonCount = unisonConfig.getUnisonCount();
-  const char* unisonLabel = UNISON_LABELS[currentUnisonCount - 1];  // x1, x2, x3, x4
-  
-  // Draw unison label at bottom center
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  int textWidth = strlen(unisonLabel) * 12;  // Approximate width
-  display.setCursor((SCREEN_WIDTH - textWidth) / 2, SCREEN_HEIGHT - 16);
-  display.print(unisonLabel);
-  
-  display.display();
-  
-  // Restore gauge to waveform configuration after animation
-  if (elapsed >= UNISON_ANIMATION_DURATION_MS + 500) {
-    gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
-               WAVEFORM_LABELS, NUM_WAVEFORMS, WAVEFORM_ANGLES);
-  }
-}
 
 // ========== Update Display with Waveform ==========
 void updateDisplay() {
-  // Check if showing unison animation (priority over waveform animation)
-  if (showingUnisonAnimation) {
-    if (millis() < unisonAnimationEndTime) {
-      drawUnisonAnimation();
-      return;
-    } else {
-      showingUnisonAnimation = false;
-      // Restore gauge to waveform configuration
+  // Handle animations with gauge's built-in animation system
+  if (gauge.isAnimating()) {
+    const char* label = nullptr;
+    
+    if (currentAnimation == ANIM_WAVEFORM) {
+      // Get waveform name for display
+      switch (currentGlobalWaveform) {
+        case OSC_SAWTOOTH: label = "SAW"; break;
+        case OSC_SQUARE:   label = "SQR"; break;
+        case OSC_TRIANGLE: label = "TRI"; break;
+        case OSC_SINE:     label = "SIN"; break;
+      }
+    } else if (currentAnimation == ANIM_UNISON) {
+      // Get unison label for display
+      int currentUnisonCount = unisonConfig.getUnisonCount();
+      label = UNISON_LABELS[currentUnisonCount - 1];  // x1, x2, x3, x4
+    }
+    
+    // Draw gauge with animation and label
+    gauge.drawWithLabel(label);
+    
+    // Restore gauge to waveform configuration after unison animation completes
+    if (currentAnimation == ANIM_UNISON && !gauge.isAnimating()) {
       gauge.init(&display, SCREEN_WIDTH / 2, 45, 45, 28, 
                  WAVEFORM_LABELS, NUM_WAVEFORMS, WAVEFORM_ANGLES);
+      currentAnimation = ANIM_NONE;
+    } else if (currentAnimation == ANIM_WAVEFORM && !gauge.isAnimating()) {
+      currentAnimation = ANIM_NONE;
     }
-  }
-  
-  // Check if showing knob animation
-  if (showingKnobAnimation) {
-    if (millis() < knobAnimationEndTime) {
-      drawKnobAnimation();
-      return;
-    } else {
-      showingKnobAnimation = false;
-    }
+    
+    return;
   }
   
   // Read shared variables with mutex protection
