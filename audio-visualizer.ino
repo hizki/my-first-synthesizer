@@ -45,14 +45,13 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "driver/i2s_std.h"
-#include "driver/gpio.h"
 
 #include "Oscillator.h"
 #include "ChordLibrary.h"
 #include "ChordPlayer.h"
 #include "Gauge.h"
 #include "UnisonConfig.h"
+#include "I2SDriver.h"
 
 // ========== OLED Display Configuration ==========
 #define SCREEN_WIDTH  128
@@ -65,11 +64,11 @@
 // Initialize OLED display using I2C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ========== I2S Pin Configuration ==========
-// MAX98357A connections (from working example)
-#define I2S_BCLK    26   // MAX98357A BCLK
-#define I2S_LRCLK   25   // MAX98357A LRC / LRCLK / WS
-#define I2S_DOUT    22   // MAX98357A DIN
+// ========== I2S Audio Configuration ==========
+// MAX98357A connections: BCLK=GPIO26, LRC=GPIO25, DIN=GPIO22
+#define I2S_BCLK    26
+#define I2S_LRCLK   25
+#define I2S_DOUT    22
 
 // ========== Potentiometer Configuration ==========
 #define DIAL1       4    // First potentiometer for volume control (GPIO 4 / D4)
@@ -86,12 +85,11 @@ enum PlayMode {
 };
 
 // ========== Audio Configuration ==========
-#define I2S_PORT        I2S_NUM_0
 #define SAMPLE_RATE     44100          // 44.1 kHz
 #define TONE_FREQUENCY  880.0f        // A5, 880 Hz (higher frequency reduces speaker load)
 
-// I2S channel handle for new driver
-i2s_chan_handle_t tx_handle = NULL;
+// I2S audio driver
+I2SDriver i2sDriver;
 
 // ========== FreeRTOS Task Handles ==========
 TaskHandle_t audioTaskHandle = NULL;
@@ -248,56 +246,6 @@ void handleButtonPress() {
   lastButtonState = buttonState;
 }
 
-// ========== I2S Setup (New Driver API) ==========
-void setupI2S() {
-  // Create I2S channel configuration
-  i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-  chan_cfg.auto_clear = true;  // Auto clear DMA buffer
-  chan_cfg.dma_desc_num = 16;   // Increased from 8 for better buffering
-  chan_cfg.dma_frame_num = 256; // Increased from 64 for better buffering
-  
-  // Allocate new TX channel
-  esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, NULL);
-  if (err != ESP_OK) {
-    Serial.printf("Failed to create I2S channel: %d\n", err);
-    return;
-  }
-  
-  // Configure I2S standard mode (Philips standard)
-  i2s_std_config_t std_cfg = {
-    .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE),
-    .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
-    .gpio_cfg = {
-      .mclk = I2S_GPIO_UNUSED,
-      .bclk = (gpio_num_t)I2S_BCLK,
-      .ws = (gpio_num_t)I2S_LRCLK,
-      .dout = (gpio_num_t)I2S_DOUT,
-      .din = I2S_GPIO_UNUSED,
-      .invert_flags = {
-        .mclk_inv = false,
-        .bclk_inv = false,
-        .ws_inv = false,
-      },
-    },
-  };
-  
-  // Initialize the channel
-  err = i2s_channel_init_std_mode(tx_handle, &std_cfg);
-  if (err != ESP_OK) {
-    Serial.printf("Failed to initialize I2S standard mode: %d\n", err);
-    return;
-  }
-  
-  // Enable the channel
-  err = i2s_channel_enable(tx_handle);
-  if (err != ESP_OK) {
-    Serial.printf("Failed to enable I2S channel: %d\n", err);
-    return;
-  }
-  
-  Serial.println("I2S initialized successfully (new driver).");
-}
-
 // ========== Display Setup ==========
 void setupDisplay() {
   // Initialize I2C with custom pins (to avoid conflict with I2S GPIO22)
@@ -382,8 +330,11 @@ void setup() {
   Serial.println("Chord player initialized (using shared oscillator)");
   Serial.println("Unison config initialized (default: x1)");
   
-  // Initialize I2S audio
-  setupI2S();
+  // Initialize I2S audio driver
+  if (!i2sDriver.init(SAMPLE_RATE, I2S_BCLK, I2S_LRCLK, I2S_DOUT)) {
+    Serial.println("ERROR: Failed to initialize I2S driver!");
+    while (1) delay(1000);
+  }
 
   // Create mutex for volume synchronization
   volumeMutex = xSemaphoreCreateMutex();
@@ -574,11 +525,9 @@ void audioTask(void *parameter) {
       }
     }
     
-    // Output audio through I2S
+    // Output audio through I2S driver
     size_t bytesWritten = 0;
-    if (tx_handle != NULL) {
-      i2s_channel_write(tx_handle, buffer, sizeof(buffer), &bytesWritten, portMAX_DELAY);
-    }
+    i2sDriver.write(buffer, sizeof(buffer), &bytesWritten);
     
     // Small yield to prevent watchdog issues
     taskYIELD();
