@@ -1,6 +1,17 @@
 ESP32 Audio Visualizer - Wiring Guide
 =====================================
 
+GPIO PIN SUMMARY:
+-----------------
+• GPIO 0  - BOOT button (built-in, waveform/mode control)
+• GPIO 4  - DIAL1 potentiometer (volume control)
+• GPIO 19 - I2C SCL (OLED clock)
+• GPIO 21 - I2C SDA (OLED data)
+• GPIO 22 - I2S DIN (audio data to MAX98357A)
+• GPIO 25 - I2S LRC (audio left/right clock)
+• GPIO 26 - I2S BCLK (audio bit clock)
+• GPIO 33 - DIAL2 potentiometer (unison control)
+
 MAX98357A I2S AMPLIFIER:
 -------------------------
   BCLK  →  GPIO 26  (Bit Clock)
@@ -18,14 +29,31 @@ OLED DISPLAY (SSD1306):
   VCC   →  3.3V     (Power)
   GND   →  GND      (Ground)
 
-POTENTIOMETER (10kΩ Volume Control):
-------------------------------------
+POTENTIOMETER 1 (10kΩ Volume Control - DIAL1):
+-----------------------------------------------
   Pin 1 (one side)  →  3.3V      (Power)
   Pin 2 (wiper)     →  GPIO 4    (Analog input / D4)
   Pin 3 (other side) →  GND      (Ground)
 
   Note: Orient the potentiometer so that turning clockwise
         increases the voltage on the wiper (increases volume).
+
+POTENTIOMETER 2 (10kΩ Unison Control - DIAL2):
+-----------------------------------------------
+  Pin 1 (one side)  →  3.3V      (Power)
+  Pin 2 (wiper)     →  GPIO 33   (Analog input)
+  Pin 3 (other side) →  GND      (Ground)
+
+  Note: Controls unison voices (x1, x2, x3, x4) in chord modes.
+        Turn clockwise to increase the number of detuned voices.
+
+BOOT BUTTON:
+------------
+  Built-in on ESP32-WROOM-32 board (GPIO 0)
+  
+  Controls:
+  • Short press (<1 second): Cycle waveform (SAW → SQR → TRI → SIN)
+  • Long press (≥1 second): Cycle mode (PROG → CHORD → NOTE)
 
 SPEAKER/OUTPUT:
 ---------------
@@ -38,7 +66,8 @@ NOTES:
 • GPIO 19 is used for I2C SCL instead of the typical GPIO 22
   because GPIO 22 is needed for I2S data output (DIN).
 
-• GPIO 4 is an ADC-capable pin used to read the potentiometer.
+• GPIO 4 and GPIO 33 are ADC-capable pins used to read the
+  potentiometers (DIAL1 for volume, DIAL2 for unison).
 
 • The MAX98357A can be powered from either 3.3V or 5V.
   5V provides more output power if needed.
@@ -46,13 +75,19 @@ NOTES:
 • Make sure all ground connections are common.
 
 • If your OLED display doesn't initialize, try changing
-  OLED_ADDRESS to 0x3D in the code (line 44).
+  OLED_ADDRESS to 0x3D in the code.
 
 POTENTIOMETER TIPS:
 ------------------
-• Use a 10kΩ linear potentiometer for smooth volume control.
+• Use 10kΩ linear potentiometers for both controls.
 • Make sure to connect 3.3V and GND correctly - reversed
-  connections won't damage anything but volume will work backwards.
-• The ADC reads 0-4095, which is mapped to 0-100% volume.
-• Smoothing is applied in software to reduce jitter.
+  connections won't damage anything but controls will work backwards.
+• DIAL1 (GPIO 4): Controls volume from 0-100%
+• DIAL2 (GPIO 33): Controls unison voices (x1/x2/x3/x4) in chord modes
+  - Fully CCW: x1 (single voice, no detune)
+  - 1/3 turn: x2 (two voices, slight detune)
+  - 2/3 turn: x3 (three voices, medium detune)
+  - Fully CW: x4 (four voices, rich detune)
+• The ADC reads 0-4095, with hysteresis zones to prevent jitter.
+• Smoothing is applied in software for stable readings.
 
