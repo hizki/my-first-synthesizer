@@ -5,6 +5,8 @@ GPIO PIN SUMMARY:
 -----------------
 • GPIO 0  - BOOT button (built-in, waveform/mode control)
 • GPIO 4  - DIAL1 potentiometer (volume control)
+• GPIO 13 - OK button (cycle waveform)
+• GPIO 16 - BACK button (cycle mode)
 • GPIO 19 - I2C SCL (OLED clock)
 • GPIO 21 - I2C SDA (OLED data)
 • GPIO 22 - I2S DIN (audio data to MAX98357A)
@@ -54,6 +56,34 @@ BOOT BUTTON:
   Controls:
   • Short press (<1 second): Cycle waveform (SAW → SQR → TRI → SIN)
   • Long press (≥1 second): Cycle mode (PROG → CHORD → NOTE)
+
+OK BUTTON (GPIO 13):
+--------------------
+  Push button connecting GPIO 13 to GND
+  
+  Wiring:
+  • One side → GPIO 13
+  • Other side → GND
+  
+  Function:
+  • Press to cycle waveform (SAW → SQR → TRI → SIN)
+  • Same functionality as short press on BOOT button
+  
+  Note: Uses internal pull-up resistor (INPUT_PULLUP mode)
+
+BACK BUTTON (GPIO 16):
+----------------------
+  Push button connecting GPIO 16 to GND
+  
+  Wiring:
+  • One side → GPIO 16
+  • Other side → GND
+  
+  Function:
+  • Press to cycle mode (PROGRESSION → CHORD → NOTE)
+  • Same functionality as long press on BOOT button
+  
+  Note: Uses internal pull-up resistor (INPUT_PULLUP mode)
 
 SPEAKER/OUTPUT:
 ---------------

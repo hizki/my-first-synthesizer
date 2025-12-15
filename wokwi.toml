@@ -1,0 +1,5 @@
+[wokwi]
+version = 1
+firmware = 'build/chord-synth.ino.bin'
+elf = 'build/chord-synth.ino.elf'
+

@@ -1,0 +1,6 @@
+build/chord-synth.ino.bin
+build/chord-synth.ino.bootloader.bin
+build/chord-synth.ino.elf
+build/chord-synth.ino.map
+build/chord-synth.ino.merged.bin
+build/chord-synth.ino.partitions.bin

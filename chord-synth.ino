@@ -40,6 +40,16 @@
  *   Short press: Cycle waveform (SAW → SQR → TRI → SIN)
  *   Long press: Cycle mode (PROGRESSION → CHORD → NOTE)
  * 
+ * OK Button:
+ *   One side  -> GPIO 13
+ *   Other side -> GND
+ *   Function: Cycle waveform (same as short press on BOOT)
+ * 
+ * BACK Button:
+ *   One side  -> GPIO 16
+ *   Other side -> GND
+ *   Function: Cycle mode (same as long press on BOOT)
+ * 
  * Libraries Required:
  * - Adafruit GFX Library
  * - Adafruit SSD1306
@@ -81,6 +91,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ========== Button Configuration ==========
 #define BOOT_BUTTON 0    // BOOT button (GPIO 0)
+#define OK_BUTTON   13   // OK button (GPIO 13) - same as short press BOOT
+#define BACK_BUTTON 16   // BACK button (GPIO 16) - same as long press BOOT
 
 // ========== Play Mode ==========
 enum PlayMode {
@@ -215,6 +227,7 @@ void cycleMode() {
 
 // ========== Button Polling (called from loop) ==========
 void handleButtonPress() {
+  // BOOT button with long-press detection
   static unsigned long lastDebounceTime = 0;
   static bool lastButtonState = HIGH;
   bool buttonState = digitalRead(BOOT_BUTTON);
@@ -249,6 +262,44 @@ void handleButtonPress() {
   }
   
   lastButtonState = buttonState;
+  
+  // OK button (GPIO 13) - same as short press on BOOT (cycle waveform)
+  static unsigned long lastDebounceTimeOk = 0;
+  static bool lastOkButtonState = HIGH;
+  bool okButtonState = digitalRead(OK_BUTTON);
+  
+  if (okButtonState != lastOkButtonState) {
+    lastDebounceTimeOk = millis();
+  }
+  
+  if ((millis() - lastDebounceTimeOk) > DEBOUNCE_DELAY) {
+    if (okButtonState == LOW && lastOkButtonState == HIGH) {
+      // OK button just pressed - cycle waveform
+      cycleWaveform();
+      Serial.println("OK button pressed");
+    }
+  }
+  
+  lastOkButtonState = okButtonState;
+  
+  // BACK button (GPIO 16) - same as long press on BOOT (cycle mode)
+  static unsigned long lastDebounceTimeBack = 0;
+  static bool lastBackButtonState = HIGH;
+  bool backButtonState = digitalRead(BACK_BUTTON);
+  
+  if (backButtonState != lastBackButtonState) {
+    lastDebounceTimeBack = millis();
+  }
+  
+  if ((millis() - lastDebounceTimeBack) > DEBOUNCE_DELAY) {
+    if (backButtonState == LOW && lastBackButtonState == HIGH) {
+      // BACK button just pressed - cycle mode
+      cycleMode();
+      Serial.println("BACK button pressed");
+    }
+  }
+  
+  lastBackButtonState = backButtonState;
 }
 
 // ========== Display Setup ==========
@@ -291,9 +342,13 @@ void setup() {
   Serial.println("DIAL1 (volume) initialized on GPIO 4");
   Serial.println("DIAL2 initialized on GPIO 33");
 
-  // Initialize BOOT button for polling
+  // Initialize buttons for polling
   pinMode(BOOT_BUTTON, INPUT_PULLUP);
+  pinMode(OK_BUTTON, INPUT_PULLUP);
+  pinMode(BACK_BUTTON, INPUT_PULLUP);
   Serial.println("BOOT button initialized on GPIO 0 (short=waveform, long=mode)");
+  Serial.println("OK button initialized on GPIO 13 (cycle waveform)");
+  Serial.println("BACK button initialized on GPIO 16 (cycle mode)");
 
   // Initialize display first
   setupDisplay();
@@ -368,9 +423,10 @@ void setup() {
   Serial.println("%");
   Serial.println("Audio task running on Core 1, Display task on Core 0");
   Serial.println();
-  Serial.println("BOOT Button Controls:");
-  Serial.println("  Short press (<1s): Cycle waveform (SAW -> SQR -> TRI -> SIN)");
-  Serial.println("  Long press (>=1s): Cycle mode (PROG -> CHORD -> NOTE)");
+  Serial.println("Button Controls:");
+  Serial.println("  BOOT: Short press (<1s) = Cycle waveform, Long press (>=1s) = Cycle mode");
+  Serial.println("  OK (GPIO 13): Cycle waveform (SAW -> SQR -> TRI -> SIN)");
+  Serial.println("  BACK (GPIO 16): Cycle mode (PROG -> CHORD -> NOTE)");
   Serial.println();
 }
 
