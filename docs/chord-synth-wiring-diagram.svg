@@ -1,0 +1,304 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" style="background: white;">
+  <!-- Title -->
+  <text x="700" y="30" font-family="Arial, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#333">
+    CHORD SYNTH - Complete Wiring Diagram
+  </text>
+  
+  <!-- ESP32 Board (Center) -->
+  <g id="esp32-board">
+    <rect x="450" y="350" width="500" height="180" fill="#1a1a1a" stroke="#000" stroke-width="2" rx="5"/>
+    
+    <!-- USB connector -->
+    <rect x="430" y="400" width="25" height="80" fill="#c0c0c0" stroke="#808080" stroke-width="2"/>
+    <text x="420" y="440" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="end" fill="#333">USB</text>
+    
+    <!-- TOP ROW PINS -->
+    <g id="top-pins">
+      <!-- VN -->
+      <circle cx="500" cy="350" r="4" fill="#666"/><text x="500" y="340" font-size="9" text-anchor="middle" fill="#333">VN</text>
+      <!-- GND -->
+      <circle cx="535" cy="350" r="4" fill="#000"/><text x="535" y="340" font-size="9" text-anchor="middle" fill="#333">GND</text>
+      
+      <!-- D13 - OK Button -->
+      <circle cx="570" cy="350" r="5" fill="#95E1D3" stroke="#333" stroke-width="1.5"/>
+      <text x="570" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D13</text>
+      
+      <!-- D12 -->
+      <circle cx="605" cy="350" r="4" fill="#666"/><text x="605" y="340" font-size="9" text-anchor="middle" fill="#333">D12</text>
+      
+      <!-- D14 - Touch Pad 3 -->
+      <circle cx="640" cy="350" r="5" fill="#FFD93D" stroke="#333" stroke-width="1.5"/>
+      <text x="640" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D14</text>
+      
+      <!-- D27 - Touch Pad 1 -->
+      <circle cx="675" cy="350" r="5" fill="#FFD93D" stroke="#333" stroke-width="1.5"/>
+      <text x="675" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D27</text>
+      
+      <!-- D26 - I2S BCLK -->
+      <circle cx="710" cy="350" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
+      <text x="710" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D26</text>
+      
+      <!-- D25 - I2S LRC -->
+      <circle cx="745" cy="350" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
+      <text x="745" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D25</text>
+      
+      <!-- D33 - DIAL2 -->
+      <circle cx="780" cy="350" r="5" fill="#FF6B35" stroke="#333" stroke-width="1.5"/>
+      <text x="780" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D33</text>
+      
+      <!-- D32 - Touch Pad 2 -->
+      <circle cx="815" cy="350" r="5" fill="#FFD93D" stroke="#333" stroke-width="1.5"/>
+      <text x="815" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D32</text>
+      
+      <!-- D35 -->
+      <circle cx="850" cy="350" r="4" fill="#666"/><text x="850" y="340" font-size="9" text-anchor="middle" fill="#333">D35</text>
+      <!-- D34 -->
+      <circle cx="885" cy="350" r="4" fill="#666"/><text x="885" y="340" font-size="9" text-anchor="middle" fill="#333">D34</text>
+      <!-- VN -->
+      <circle cx="920" cy="350" r="4" fill="#666"/><text x="920" y="340" font-size="9" text-anchor="middle" fill="#333">VN</text>
+    </g>
+    
+    <!-- BOTTOM ROW PINS -->
+    <g id="bottom-pins">
+      <!-- 3V3 -->
+      <circle cx="500" cy="530" r="4" fill="#c00"/><text x="500" y="545" font-size="9" font-weight="bold" text-anchor="middle" fill="#c00">3V3</text>
+      <!-- GND -->
+      <circle cx="535" cy="530" r="4" fill="#000"/><text x="535" y="545" font-size="9" text-anchor="middle" fill="#333">GND</text>
+      <!-- D15 -->
+      <circle cx="570" cy="530" r="4" fill="#666"/><text x="570" y="545" font-size="9" text-anchor="middle" fill="#333">D15</text>
+      <!-- D2 -->
+      <circle cx="605" cy="530" r="4" fill="#666"/><text x="605" y="545" font-size="9" text-anchor="middle" fill="#333">D2</text>
+      
+      <!-- D4 - DIAL1 -->
+      <circle cx="640" cy="530" r="5" fill="#FF6B35" stroke="#333" stroke-width="1.5"/>
+      <text x="640" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D4</text>
+      
+      <!-- D16 - BACK Button -->
+      <circle cx="675" cy="530" r="5" fill="#95E1D3" stroke="#333" stroke-width="1.5"/>
+      <text x="675" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D16</text>
+      
+      <!-- D17 -->
+      <circle cx="710" cy="530" r="4" fill="#666"/><text x="710" y="545" font-size="9" text-anchor="middle" fill="#333">D17</text>
+      <!-- D5 -->
+      <circle cx="745" cy="530" r="4" fill="#666"/><text x="745" y="545" font-size="9" text-anchor="middle" fill="#333">D5</text>
+      <!-- D18 -->
+      <circle cx="780" cy="530" r="4" fill="#666"/><text x="780" y="545" font-size="9" text-anchor="middle" fill="#333">D18</text>
+      
+      <!-- D19 - I2C SCL -->
+      <circle cx="815" cy="530" r="5" fill="#F38181" stroke="#333" stroke-width="1.5"/>
+      <text x="815" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D19</text>
+      
+      <!-- D21 - I2C SDA -->
+      <circle cx="850" cy="530" r="5" fill="#F38181" stroke="#333" stroke-width="1.5"/>
+      <text x="850" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D21</text>
+      
+      <!-- D22 - I2S DIN -->
+      <circle cx="885" cy="530" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
+      <text x="885" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D22</text>
+      
+      <!-- D23 -->
+      <circle cx="920" cy="530" r="4" fill="#666"/><text x="920" y="545" font-size="9" text-anchor="middle" fill="#333">D23</text>
+    </g>
+    
+    <!-- ESP32 Label -->
+    <text x="700" y="430" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#fff">
+      ESP32-WROOM-32
+    </text>
+  </g>
+  
+  <!-- OK Button (Top Left) -->
+  <g id="ok-button">
+    <circle cx="300" cy="150" r="40" fill="#95E1D3" stroke="#333" stroke-width="3"/>
+    <text x="300" y="160" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+      OK
+    </text>
+    <text x="300" y="105" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+      OK Button
+    </text>
+    <text x="300" y="120" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+      (Waveform)
+    </text>
+    <!-- Wire to D13 -->
+    <path d="M 300 190 Q 300 270, 570 350" fill="none" stroke="#95E1D3" stroke-width="3"/>
+  </g>
+  
+  <!-- BACK Button (Top Center-Left) -->
+  <g id="back-button">
+    <circle cx="500" cy="150" r="40" fill="#95E1D3" stroke="#333" stroke-width="3"/>
+    <text x="500" y="160" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#333">
+      BACK
+    </text>
+    <text x="500" y="105" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#333">
+      BACK Button
+    </text>
+    <text x="500" y="120" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+      (Mode)
+    </text>
+    <!-- Wire to D16 -->
+    <path d="M 500 190 Q 550 360, 675 530" fill="none" stroke="#95E1D3" stroke-width="3"/>
+  </g>
+  
+  <!-- I2S Audio Amp (Top Right) -->
+  <g id="i2s">
+    <rect x="1050" y="100" width="120" height="100" fill="#4ECDC4" stroke="#333" stroke-width="3" rx="5"/>
+    <text x="1110" y="140" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+      I2S AMP
+    </text>
+    <text x="1110" y="160" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#333">
+      MAX98357A
+    </text>
+    <text x="1110" y="178" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+      (Audio Out)
+    </text>
+    <text x="1110" y="75" font-family="Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle" fill="#333">
+      I2S Audio Amp
+    </text>
+    
+    <!-- Wires to I2S pins -->
+    <!-- BCLK - D26 -->
+    <path d="M 1050 120 Q 880 235, 710 350" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
+    <text x="850" y="240" font-family="Arial, sans-serif" font-size="9" fill="#333">BCLK</text>
+    <!-- LRC - D25 -->
+    <path d="M 1050 150 Q 900 250, 745 350" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
+    <text x="890" y="260" font-family="Arial, sans-serif" font-size="9" fill="#333">LRC</text>
+    <!-- DIN - D22 -->
+    <path d="M 1050 180 Q 960 355, 885 530" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
+    <text x="950" y="370" font-family="Arial, sans-serif" font-size="9" fill="#333">DIN</text>
+  </g>
+  
+  <!-- Touch Pad 1 (Top Right) -->
+  <g id="pad1">
+    <rect x="1050" y="240" width="120" height="70" fill="#FFD93D" stroke="#333" stroke-width="3" rx="8"/>
+    <text x="1110" y="270" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+      PAD 1
+    </text>
+    <text x="1110" y="295" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#333">
+      Touch Sensor (T7)
+    </text>
+    <!-- Wire to D27 -->
+    <path d="M 1050 275 Q 860 310, 675 350" fill="none" stroke="#FFD93D" stroke-width="3"/>
+  </g>
+  
+  <!-- Touch Pad 2 (Middle Right) -->
+  <g id="pad2">
+    <rect x="1050" y="340" width="120" height="70" fill="#FFD93D" stroke="#333" stroke-width="3" rx="8"/>
+    <text x="1110" y="370" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+      PAD 2
+    </text>
+    <text x="1110" y="395" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#333">
+      Touch Sensor (T9)
+    </text>
+    <!-- Wire to D32 -->
+    <path d="M 1050 375 Q 930 360, 815 350" fill="none" stroke="#FFD93D" stroke-width="3"/>
+  </g>
+  
+  <!-- Touch Pad 3 (Bottom Right) -->
+  <g id="pad3">
+    <rect x="1050" y="440" width="120" height="70" fill="#FFD93D" stroke="#333" stroke-width="3" rx="8"/>
+    <text x="1110" y="470" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="#333">
+      PAD 3
+    </text>
+    <text x="1110" y="495" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#333">
+      Touch Sensor (T6)
+    </text>
+    <!-- Wire to D14 -->
+    <path d="M 1050 475 Q 845 410, 640 350" fill="none" stroke="#FFD93D" stroke-width="3"/>
+  </g>
+  
+  <!-- OLED Display (Bottom Left) -->
+  <g id="oled">
+    <rect x="180" y="640" width="180" height="120" fill="#F38181" stroke="#333" stroke-width="3" rx="5"/>
+    <rect x="195" y="655" width="150" height="80" fill="#000" stroke="#333" stroke-width="2"/>
+    <line x1="210" y1="668" x2="330" y2="668" stroke="#0af" stroke-width="1"/>
+    <text x="270" y="700" font-family="monospace" font-size="12" text-anchor="middle" fill="#0af">CHORD SYNTH</text>
+    <text x="270" y="720" font-family="monospace" font-size="10" text-anchor="middle" fill="#0af">Ready...</text>
+    <text x="270" y="785" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+      OLED Display
+    </text>
+    <text x="270" y="803" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
+      128x64 I2C
+    </text>
+    
+    <!-- Wires to I2C pins -->
+    <!-- SCL - D19 -->
+    <path d="M 360 680 Q 590 605, 815 530" fill="none" stroke="#F38181" stroke-width="2.5"/>
+    <text x="600" y="600" font-family="Arial, sans-serif" font-size="9" fill="#333">SCL</text>
+    <!-- SDA - D21 -->
+    <path d="M 360 710 Q 610 620, 850 530" fill="none" stroke="#F38181" stroke-width="2.5"/>
+    <text x="620" y="615" font-family="Arial, sans-serif" font-size="9" fill="#333">SDA</text>
+  </g>
+  
+  <!-- DIAL 1 (Bottom Center-Left) -->
+  <g id="dial1">
+    <circle cx="520" cy="700" r="50" fill="#FF6B35" stroke="#333" stroke-width="3"/>
+    <circle cx="520" cy="700" r="35" fill="none" stroke="#333" stroke-width="2"/>
+    <line x1="520" y1="700" x2="540" y2="680" stroke="#333" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="520" cy="700" r="8" fill="#333"/>
+    <text x="520" y="795" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+      DIAL 1
+    </text>
+    <text x="520" y="813" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#666">
+      Potentiometer (Volume)
+    </text>
+    <!-- Wire to D4 -->
+    <path d="M 520 650 Q 580 590, 640 530" fill="none" stroke="#FF6B35" stroke-width="3"/>
+  </g>
+  
+  <!-- DIAL 2 (Bottom Center-Right) -->
+  <g id="dial2">
+    <circle cx="710" cy="700" r="50" fill="#FF6B35" stroke="#333" stroke-width="3"/>
+    <circle cx="710" cy="700" r="35" fill="none" stroke="#333" stroke-width="2"/>
+    <line x1="710" y1="700" x2="730" y2="680" stroke="#333" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="710" cy="700" r="8" fill="#333"/>
+    <text x="710" y="795" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#333">
+      DIAL 2
+    </text>
+    <text x="710" y="813" font-family="Arial, sans-serif" font-size="11" text-anchor="middle" fill="#666">
+      Potentiometer (Unison)
+    </text>
+    <!-- Wire to D33 -->
+    <path d="M 710 650 Q 745 490, 780 350" fill="none" stroke="#FF6B35" stroke-width="3"/>
+  </g>
+  
+  <!-- Power connections note -->
+  <g id="power-note" transform="translate(180, 810)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#c00">
+      POWER CONNECTIONS:
+    </text>
+    <text x="0" y="18" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      • All components need 3V3 and GND connections (not shown for clarity)
+    </text>
+    <text x="0" y="35" font-family="Arial, sans-serif" font-size="10" fill="#333">
+      • Use ESP32 3V3 (Pin 1) and GND (Pin 2 or 14) for power distribution
+    </text>
+  </g>
+  
+  <!-- Legend -->
+  <g id="legend" transform="translate(1220, 600)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#333">WIRE LEGEND:</text>
+    
+    <line x1="0" y1="20" x2="40" y2="20" stroke="#95E1D3" stroke-width="3"/>
+    <text x="50" y="24" font-family="Arial, sans-serif" font-size="10" fill="#333">Buttons</text>
+    
+    <line x1="0" y1="40" x2="40" y2="40" stroke="#FFD93D" stroke-width="3"/>
+    <text x="50" y="44" font-family="Arial, sans-serif" font-size="10" fill="#333">Touch Pads</text>
+    
+    <line x1="0" y1="60" x2="40" y2="60" stroke="#FF6B35" stroke-width="3"/>
+    <text x="50" y="64" font-family="Arial, sans-serif" font-size="10" fill="#333">Analog Input</text>
+    
+    <line x1="0" y1="80" x2="40" y2="80" stroke="#4ECDC4" stroke-width="3"/>
+    <text x="50" y="84" font-family="Arial, sans-serif" font-size="10" fill="#333">I2S Audio</text>
+    
+    <line x1="0" y1="100" x2="40" y2="100" stroke="#F38181" stroke-width="3"/>
+    <text x="50" y="104" font-family="Arial, sans-serif" font-size="10" fill="#333">I2C Bus</text>
+  </g>
+  
+  <!-- Pin Label Header -->
+  <text x="700" y="315" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#666">
+    ↑ Top Row Pins
+  </text>
+  <text x="700" y="565" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#666">
+    Bottom Row Pins ↓
+  </text>
+</svg>
+
