@@ -29,8 +29,8 @@ public:
   I2SDriver() : 
     _txHandle(nullptr),
     _sampleRate(44100),
-    _bclkPin(26),
-    _lrclkPin(25),
+    _bclkPin(25),
+    _lrclkPin(26),
     _doutPin(22),
     _isInitialized(false) {
   }
@@ -39,12 +39,12 @@ public:
    * Initialize I2S driver with pin configuration
    * 
    * @param sampleRate Sample rate in Hz (default: 44100)
-   * @param bclkPin Bit clock pin (default: 26)
-   * @param lrclkPin Left/right clock pin (default: 25)
+   * @param bclkPin Bit clock pin (default: 25)
+   * @param lrclkPin Left/right clock pin (default: 26)
    * @param doutPin Data out pin (default: 22)
    * @return true if initialization successful, false otherwise
    */
-  bool init(uint32_t sampleRate = 44100, int bclkPin = 26, int lrclkPin = 25, int doutPin = 22) {
+  bool init(uint32_t sampleRate = 44100, int bclkPin = 25, int lrclkPin = 26, int doutPin = 22) {
     _sampleRate = sampleRate;
     _bclkPin = bclkPin;
     _lrclkPin = lrclkPin;

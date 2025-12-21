@@ -10,14 +10,14 @@ GPIO PIN SUMMARY:
 • GPIO 19 - I2C SCL (OLED clock)
 • GPIO 21 - I2C SDA (OLED data)
 • GPIO 22 - I2S DIN (audio data to MAX98357A)
-• GPIO 25 - I2S LRC (audio left/right clock)
-• GPIO 26 - I2S BCLK (audio bit clock)
+• GPIO 25 - I2S BCLK (audio bit clock)
+• GPIO 26 - I2S LRC (audio left/right clock)
 • GPIO 33 - DIAL2 potentiometer (unison control)
 
 MAX98357A I2S AMPLIFIER:
 -------------------------
-  BCLK  →  GPIO 26  (Bit Clock)
-  LRC   →  GPIO 25  (Left/Right Clock / Word Select)
+  BCLK  →  GPIO 25  (Bit Clock)
+  LRC   →  GPIO 26  (Left/Right Clock / Word Select)
   DIN   →  GPIO 22  (Data In)
   VIN   →  3.3V     (Power - can also use 5V)
   GND   →  GND      (Ground)

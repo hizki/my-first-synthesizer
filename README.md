@@ -53,7 +53,7 @@ See [WIRING.txt](WIRING.txt) for complete wiring diagram.
 
 **Quick Reference:**
 ```
-MAX98357A:  BCLK=GPIO26, LRC=GPIO25, DIN=GPIO22
+MAX98357A:  BCLK=GPIO25, LRC=GPIO26, DIN=GPIO22
 OLED:       SDA=GPIO21, SCL=GPIO19
 DIAL1:      Wiper=GPIO4 (Volume)
 DIAL2:      Wiper=GPIO33 (Unison)

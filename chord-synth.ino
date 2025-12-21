@@ -13,8 +13,8 @@
  * Connections:
  * 
  * MAX98357A:
- *   BCLK -> GPIO 26
- *   LRC  -> GPIO 25
+ *   BCLK -> GPIO 25
+ *   LRC  -> GPIO 26
  *   DIN  -> GPIO 22
  *   VIN  -> 3.3V (or 5V)
  *   GND  -> GND
@@ -80,9 +80,9 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ========== I2S Audio Configuration ==========
-// MAX98357A connections: BCLK=GPIO26, LRC=GPIO25, DIN=GPIO22
-#define I2S_BCLK    26
-#define I2S_LRCLK   25
+// MAX98357A connections: BCLK=GPIO25, LRC=GPIO26, DIN=GPIO22
+#define I2S_BCLK    25
+#define I2S_LRCLK   26
 #define I2S_DOUT    22
 
 // ========== Potentiometer Configuration ==========

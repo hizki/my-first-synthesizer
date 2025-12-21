@@ -35,11 +35,11 @@
       <circle cx="675" cy="350" r="5" fill="#FFD93D" stroke="#333" stroke-width="1.5"/>
       <text x="675" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D27</text>
       
-      <!-- D26 - I2S BCLK -->
+      <!-- D26 - I2S LRC -->
       <circle cx="710" cy="350" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
       <text x="710" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D26</text>
       
-      <!-- D25 - I2S LRC -->
+      <!-- D25 - I2S BCLK -->
       <circle cx="745" cy="350" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
       <text x="745" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D25</text>
       
@@ -160,12 +160,12 @@
     </text>
     
     <!-- Wires to I2S pins -->
-    <!-- BCLK - D26 -->
+    <!-- LRC - D26 -->
     <path d="M 1050 120 Q 880 235, 710 350" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
-    <text x="850" y="240" font-family="Arial, sans-serif" font-size="9" fill="#333">BCLK</text>
-    <!-- LRC - D25 -->
+    <text x="850" y="240" font-family="Arial, sans-serif" font-size="9" fill="#333">LRC</text>
+    <!-- BCLK - D25 -->
     <path d="M 1050 150 Q 900 250, 745 350" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
-    <text x="890" y="260" font-family="Arial, sans-serif" font-size="9" fill="#333">LRC</text>
+    <text x="890" y="260" font-family="Arial, sans-serif" font-size="9" fill="#333">BCLK</text>
     <!-- DIN - D22 -->
     <path d="M 1050 180 Q 1000 355, 955 530" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
     <text x="990" y="370" font-family="Arial, sans-serif" font-size="9" fill="#333">DIN</text>
