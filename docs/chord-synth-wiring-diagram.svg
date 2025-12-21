@@ -6,7 +6,7 @@
   
   <!-- ESP32 Board (Center) -->
   <g id="esp32-board">
-    <rect x="450" y="350" width="500" height="180" fill="#1a1a1a" stroke="#000" stroke-width="2" rx="5"/>
+    <rect x="450" y="350" width="570" height="180" fill="#1a1a1a" stroke="#000" stroke-width="2" rx="5"/>
     
     <!-- USB connector -->
     <rect x="430" y="400" width="25" height="80" fill="#c0c0c0" stroke="#808080" stroke-width="2"/>
@@ -23,8 +23,9 @@
       <circle cx="570" cy="350" r="5" fill="#95E1D3" stroke="#333" stroke-width="1.5"/>
       <text x="570" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D13</text>
       
-      <!-- D12 -->
-      <circle cx="605" cy="350" r="4" fill="#666"/><text x="605" y="340" font-size="9" text-anchor="middle" fill="#333">D12</text>
+      <!-- D12 - BACK Button -->
+      <circle cx="605" cy="350" r="5" fill="#95E1D3" stroke="#333" stroke-width="1.5"/>
+      <text x="605" y="340" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D12</text>
       
       <!-- D14 - Touch Pad 3 -->
       <circle cx="640" cy="350" r="5" fill="#FFD93D" stroke="#333" stroke-width="1.5"/>
@@ -73,9 +74,8 @@
       <circle cx="640" cy="530" r="5" fill="#FF6B35" stroke="#333" stroke-width="1.5"/>
       <text x="640" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D4</text>
       
-      <!-- D16 - BACK Button -->
-      <circle cx="675" cy="530" r="5" fill="#95E1D3" stroke="#333" stroke-width="1.5"/>
-      <text x="675" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D16</text>
+      <!-- D16 -->
+      <circle cx="675" cy="530" r="4" fill="#666"/><text x="675" y="545" font-size="9" text-anchor="middle" fill="#333">D16</text>
       
       <!-- D17 -->
       <circle cx="710" cy="530" r="4" fill="#666"/><text x="710" y="545" font-size="9" text-anchor="middle" fill="#333">D17</text>
@@ -92,12 +92,17 @@
       <circle cx="850" cy="530" r="5" fill="#F38181" stroke="#333" stroke-width="1.5"/>
       <text x="850" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D21</text>
       
+      <!-- RX0 -->
+      <circle cx="885" cy="530" r="4" fill="#666"/><text x="885" y="545" font-size="9" text-anchor="middle" fill="#333">RX0</text>
+      <!-- TX0 -->
+      <circle cx="920" cy="530" r="4" fill="#666"/><text x="920" y="545" font-size="9" text-anchor="middle" fill="#333">TX0</text>
+      
       <!-- D22 - I2S DIN -->
-      <circle cx="885" cy="530" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
-      <text x="885" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D22</text>
+      <circle cx="955" cy="530" r="5" fill="#4ECDC4" stroke="#333" stroke-width="1.5"/>
+      <text x="955" y="545" font-size="10" font-weight="bold" text-anchor="middle" fill="#333">D22</text>
       
       <!-- D23 -->
-      <circle cx="920" cy="530" r="4" fill="#666"/><text x="920" y="545" font-size="9" text-anchor="middle" fill="#333">D23</text>
+      <circle cx="990" cy="530" r="4" fill="#666"/><text x="990" y="545" font-size="9" text-anchor="middle" fill="#333">D23</text>
     </g>
     
     <!-- ESP32 Label -->
@@ -134,8 +139,8 @@
     <text x="500" y="120" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#666">
       (Mode)
     </text>
-    <!-- Wire to D16 -->
-    <path d="M 500 190 Q 550 360, 675 530" fill="none" stroke="#95E1D3" stroke-width="3"/>
+    <!-- Wire to D12 -->
+    <path d="M 500 190 Q 550 270, 605 350" fill="none" stroke="#95E1D3" stroke-width="3"/>
   </g>
   
   <!-- I2S Audio Amp (Top Right) -->
@@ -162,8 +167,8 @@
     <path d="M 1050 150 Q 900 250, 745 350" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
     <text x="890" y="260" font-family="Arial, sans-serif" font-size="9" fill="#333">LRC</text>
     <!-- DIN - D22 -->
-    <path d="M 1050 180 Q 960 355, 885 530" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
-    <text x="950" y="370" font-family="Arial, sans-serif" font-size="9" fill="#333">DIN</text>
+    <path d="M 1050 180 Q 1000 355, 955 530" fill="none" stroke="#4ECDC4" stroke-width="2.5"/>
+    <text x="990" y="370" font-family="Arial, sans-serif" font-size="9" fill="#333">DIN</text>
   </g>
   
   <!-- Touch Pad 1 (Top Right) -->
